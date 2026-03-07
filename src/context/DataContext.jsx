@@ -1,5 +1,16 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react'
+import {
+  collection, doc, onSnapshot, setDoc, updateDoc,
+  deleteDoc, writeBatch,
+} from 'firebase/firestore'
+import { db } from '../firebase'
+import { seedFirestore } from '../seedFirestore'
 
+const ROOT = 'CMG-payment-system/root'
+const col = (name) => collection(db, `${ROOT}/${name}`)
+const docRef = (name, id) => doc(db, `${ROOT}/${name}/${id}`)
+
+/* ─── kept only as fallback for first-run seed detection ─── */
 const INITIAL_PROJECTS = [
   {
     id: 'p1',
@@ -268,75 +279,128 @@ const INITIAL_COAS = [
 const DataContext = createContext(null)
 
 export function DataProvider({ children }) {
-  const [projects, setProjects] = useState(INITIAL_PROJECTS)
-  const [bondStatuses, setBondStatuses] = useState(INITIAL_BOND_STATUSES)
-  const [payments, setPayments] = useState(INITIAL_PAYMENTS)
-  const [cors, setCors] = useState(INITIAL_CORS)
-  const [coas, setCoas] = useState(INITIAL_COAS)
+  const [projects,     setProjects]     = useState([])
+  const [bondStatuses, setBondStatuses] = useState([])
+  const [payments,     setPayments]     = useState([])
+  const [cors,         setCors]         = useState([])
+  const [coas,         setCoas]         = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [seeded,       setSeeded]       = useState(false)
 
-  // Projects CRUD
-  const addProject = (project) => {
-    const newProject = { ...project, id: `p${Date.now()}`, createdAt: new Date().toISOString().split('T')[0], status: 'Active' }
-    setProjects(prev => [...prev, newProject])
-    setBondStatuses(prev => [...prev, {
-      id: `bs${Date.now()}`, projectId: newProject.id,
+  // ── Real-time listeners ──────────────────────────────────────────────────
+  useEffect(() => {
+    let loadCount = 0
+    const total = 5
+    const done = () => { loadCount++; if (loadCount >= total) setLoading(false) }
+
+    const snapshot = (colName, setter) =>
+      onSnapshot(col(colName), snap => {
+        setter(snap.docs.map(d => ({ ...d.data(), id: d.id })))
+        done()
+      }, err => { console.error(`Firestore ${colName}:`, err); done() })
+
+    const unsubProjects     = snapshot('projects',     setProjects)
+    const unsubBonds        = snapshot('bondStatuses', setBondStatuses)
+    const unsubPayments     = snapshot('payments',     setPayments)
+    const unsubCORs         = snapshot('cors',         setCors)
+    const unsubCOAs         = snapshot('coas',         setCoas)
+
+    return () => {
+      unsubProjects(); unsubBonds(); unsubPayments(); unsubCORs(); unsubCOAs()
+    }
+  }, [])
+
+  // ── Auto-seed on first load if Firestore is empty ────────────────────────
+  useEffect(() => {
+    if (!loading && !seeded && projects.length === 0) {
+      setSeeded(true)
+      seedFirestore()
+    }
+  }, [loading, projects.length, seeded])
+
+  // ── Projects ─────────────────────────────────────────────────────────────
+  const addProject = async (project) => {
+    const today = new Date().toISOString().split('T')[0]
+    const id = `p${Date.now()}`
+    const newProject = { ...project, id, createdAt: today, status: 'Active' }
+    await setDoc(docRef('projects', id), newProject)
+
+    const bsId = `bs${Date.now()}`
+    await setDoc(docRef('bondStatuses', bsId), {
+      id: bsId, projectId: id,
       advanceBond:     { status: 'Not finish', submitDate: '', note: '' },
       performanceBond: { status: 'Not finish', submitDate: '', note: '' },
       warrantyBond:    { status: 'Not finish', submitDate: '', note: '' },
-    }])
+    })
     return newProject
   }
 
-  const updateProject = (id, updates) => {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p))
+  const updateProject = async (id, updates) => {
+    await updateDoc(docRef('projects', id), updates)
   }
 
-  const deleteProject = (id) => {
-    setProjects(prev => prev.filter(p => p.id !== id))
+  const deleteProject = async (id) => {
+    await deleteDoc(docRef('projects', id))
   }
 
   const getProject = (id) => projects.find(p => p.id === id)
 
-  // Bond Status
+  // ── Bond Statuses ─────────────────────────────────────────────────────────
   const getBondStatus = (projectId) => bondStatuses.find(b => b.projectId === projectId)
-  const updateBondStatus = (projectId, updates) => {
-    setBondStatuses(prev => prev.map(b => b.projectId === projectId ? { ...b, ...updates } : b))
+
+  const updateBondStatus = async (projectId, updates) => {
+    const bs = bondStatuses.find(b => b.projectId === projectId)
+    if (bs) await updateDoc(docRef('bondStatuses', bs.id), updates)
   }
 
-  // Payments
+  // ── Payments ──────────────────────────────────────────────────────────────
   const getProjectPayments = (projectId, type = null) =>
     payments.filter(p => p.projectId === projectId && (type ? p.type === type : true))
 
-  const addPayment = (payment) => {
-    const newPayment = { ...payment, id: `pay${Date.now()}`, createdAt: new Date().toISOString().split('T')[0] }
-    setPayments(prev => [...prev, newPayment])
+  const addPayment = async (payment) => {
+    const today = new Date().toISOString().split('T')[0]
+    const id = `pay${Date.now()}`
+    const newPayment = { ...payment, id, createdAt: today }
+    await setDoc(docRef('payments', id), newPayment)
     return newPayment
   }
 
-  const updatePayment = (id, updates) => {
-    setPayments(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p))
+  const updatePayment = async (id, updates) => {
+    await updateDoc(docRef('payments', id), updates)
   }
 
-  // CORs
+  // ── CORs ──────────────────────────────────────────────────────────────────
   const getProjectCORs = (projectId) => cors.filter(c => c.projectId === projectId)
-  const addCOR = (cor) => {
-    const newCOR = { ...cor, id: `cor${Date.now()}`, createdAt: new Date().toISOString().split('T')[0], convertedToCOA: false, coaId: null }
-    setCors(prev => [...prev, newCOR])
+
+  const addCOR = async (cor) => {
+    const today = new Date().toISOString().split('T')[0]
+    const id = `cor${Date.now()}`
+    const newCOR = { ...cor, id, createdAt: today, convertedToCOA: false, coaId: null }
+    await setDoc(docRef('cors', id), newCOR)
     return newCOR
   }
-  const updateCOR = (id, updates) => setCors(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c))
 
-  // COAs
+  const updateCOR = async (id, updates) => {
+    await updateDoc(docRef('cors', id), updates)
+  }
+
+  // ── COAs ──────────────────────────────────────────────────────────────────
   const getProjectCOAs = (projectId) => coas.filter(c => c.projectId === projectId)
-  const addCOA = (coa) => {
-    const newCOA = { ...coa, id: `coa${Date.now()}`, approvedAt: new Date().toISOString().split('T')[0] }
-    setCoas(prev => [...prev, newCOA])
-    updateCOR(coa.corId, { convertedToCOA: true, coaId: newCOA.id })
+
+  const addCOA = async (coa) => {
+    const today = new Date().toISOString().split('T')[0]
+    const id = `coa${Date.now()}`
+    const newCOA = { ...coa, id, approvedAt: today }
+    const batch = writeBatch(db)
+    batch.set(docRef('coas', id), newCOA)
+    batch.update(docRef('cors', coa.corId), { convertedToCOA: true, coaId: id })
+    await batch.commit()
     return newCOA
   }
 
   return (
     <DataContext.Provider value={{
+      loading,
       projects, addProject, updateProject, deleteProject, getProject,
       bondStatuses, getBondStatus, updateBondStatus,
       payments, getProjectPayments, addPayment, updatePayment,

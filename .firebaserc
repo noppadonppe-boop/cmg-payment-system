@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "cmg-planning-management"
+  },
+  "targets": {
+    "cmg-planning-management": {
+      "hosting": {
+        "site-04": [
+          "cmg-payment-system"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

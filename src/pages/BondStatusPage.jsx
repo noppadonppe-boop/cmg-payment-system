@@ -111,8 +111,7 @@ export default function BondStatusPage() {
 
   const handleSave = async (projectId) => {
     setSaving(prev => ({ ...prev, [projectId]: true }))
-    await new Promise(r => setTimeout(r, 350))
-    updateBondStatus(projectId, editing[projectId])
+    await updateBondStatus(projectId, editing[projectId])
     setSaving(prev => ({ ...prev, [projectId]: false }))
     setSaved(prev => ({ ...prev, [projectId]: true }))
     setEditing(prev => { const n = { ...prev }; delete n[projectId]; return n })

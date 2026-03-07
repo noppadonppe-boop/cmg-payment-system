@@ -144,11 +144,10 @@ export default function ProjectFormPage() {
       contractValue: parseFloat(parseCurrency(form.contractValue)) || 0,
       retentionPercent: parseFloat(form.retentionPercent) || 0,
     }
-    await new Promise(r => setTimeout(r, 400))
     if (isEditing) {
-      updateProject(id, payload)
+      await updateProject(id, payload)
     } else {
-      addProject(payload)
+      await addProject(payload)
     }
     setSaving(false)
     setSaved(true)
