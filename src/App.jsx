@@ -2,53 +2,82 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Component } from 'react'
 import { AuthProvider } from './context/AuthContext'
 import { DataProvider, useData } from './context/DataContext'
+import ProtectedRoute from './components/ProtectedRoute'
 import MainLayout from './layouts/MainLayout'
-import DashboardPage from './pages/DashboardPage'
-import ProjectsPage from './pages/ProjectsPage'
-import ProjectFormPage from './pages/ProjectFormPage'
+
+// Auth pages
+import LoginPage          from './pages/LoginPage'
+import RegisterPage       from './pages/RegisterPage'
+import PendingApprovalPage from './pages/PendingApprovalPage'
+import AdminPanel         from './pages/AdminPanel'
+
+// App pages
+import DashboardPage    from './pages/DashboardPage'
+import ProjectsPage     from './pages/ProjectsPage'
+import ProjectFormPage  from './pages/ProjectFormPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
-import PlaceholderPage from './pages/PlaceholderPage'
-import BondStatusPage from './pages/BondStatusPage'
-import PaymentsPage from './pages/PaymentsPage'
+import PlaceholderPage  from './pages/PlaceholderPage'
+import BondStatusPage   from './pages/BondStatusPage'
+import PaymentsPage     from './pages/PaymentsPage'
 import ChangeOrdersPage from './pages/ChangeOrdersPage'
-import ReportsPage from './pages/ReportsPage'
+import ReportsPage      from './pages/ReportsPage'
 
-/* ─── Loading gate ── shown while Firestore first-load is in flight ─── */
-function AppRoutes() {
-  const { loading } = useData()
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-slate-50">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full border-4 border-blue-600 border-t-transparent animate-spin" />
-          <span className="text-slate-600 font-medium text-sm">Connecting to database…</span>
-        </div>
-        <p className="text-xs text-slate-400">CMG Payment Management System</p>
-      </div>
-    )
-  }
-
+/* ─── Loading spinner ─────────────────────────────────────────────────── */
+function LoadingScreen({ message = 'กำลังโหลด…' }) {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<MainLayout />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/projects/new" element={<ProjectFormPage />} />
-          <Route path="/projects/:id" element={<ProjectDetailPage />} />
-          <Route path="/projects/:id/edit" element={<ProjectFormPage />} />
-          <Route path="/bonds" element={<BondStatusPage />} />
-          <Route path="/payments" element={<PaymentsPage />} />
-          <Route path="/change-orders" element={<ChangeOrdersPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-slate-50">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full border-4 border-blue-600 border-t-transparent animate-spin" />
+        <span className="text-slate-600 font-medium text-sm">{message}</span>
+      </div>
+      <p className="text-xs text-slate-400">CMG Payment Management System</p>
+    </div>
   )
 }
 
-/* ─── Error boundary ── catches any runtime errors and shows a recovery UI ─ */
+/* ─── Protected main app (requires approved user + Firestore data) ─────── */
+function ProtectedApp() {
+  return (
+    <ProtectedRoute requireApproved>
+      <DataProvider>
+        <AppContent />
+      </DataProvider>
+    </ProtectedRoute>
+  )
+}
+
+function AppContent() {
+  const { loading } = useData()
+  if (loading) return <LoadingScreen message="กำลังเชื่อมต่อฐานข้อมูล…" />
+
+  return (
+    <Routes>
+      <Route element={<MainLayout />}>
+        <Route path="/"               element={<DashboardPage />} />
+        <Route path="/dashboard"      element={<DashboardPage />} />
+        <Route path="/projects"       element={<ProjectsPage />} />
+        <Route path="/projects/new"   element={<ProjectFormPage />} />
+        <Route path="/projects/:id"   element={<ProjectDetailPage />} />
+        <Route path="/projects/:id/edit" element={<ProjectFormPage />} />
+        <Route path="/bonds"          element={<BondStatusPage />} />
+        <Route path="/payments"       element={<PaymentsPage />} />
+        <Route path="/change-orders"  element={<ChangeOrdersPage />} />
+        <Route path="/reports"        element={<ReportsPage />} />
+        <Route path="/placeholder"    element={<PlaceholderPage />} />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute requireRoles={['SuperAdmin', 'Admin']}>
+              <AdminPanel />
+            </ProtectedRoute>
+          }
+        />
+      </Route>
+    </Routes>
+  )
+}
+
+/* ─── Error boundary ──────────────────────────────────────────────────── */
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
   static getDerivedStateFromError(error) { return { error } }
@@ -76,13 +105,22 @@ class ErrorBoundary extends Component {
   }
 }
 
+/* ─── Root ────────────────────────────────────────────────────────────── */
 function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <DataProvider>
-          <AppRoutes />
-        </DataProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/login"    element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/pending"  element={<PendingApprovalPage />} />
+
+            {/* Protected routes (approved users only) */}
+            <Route path="/*" element={<ProtectedApp />} />
+          </Routes>
+        </BrowserRouter>
       </AuthProvider>
     </ErrorBoundary>
   )

@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, FolderOpen, Shield, CreditCard,
   GitPullRequest, BarChart3, ChevronLeft, ChevronRight,
-  Building2
+  Building2, Users
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { clsx } from 'clsx'
@@ -11,46 +11,55 @@ const NAV_ITEMS = [
   {
     label: 'Dashboard',
     icon: LayoutDashboard,
-    path: '/',
-    roles: ['MD', 'GM', 'CD', 'PM', 'QsEng', 'AccCMG'],
+    path: '/dashboard',
+    roles: ['SuperAdmin', 'Admin', 'MD', 'GM', 'CD', 'PM', 'QsEng', 'AccCMG'],
   },
   {
     label: 'Projects',
     icon: FolderOpen,
     path: '/projects',
-    roles: ['MD', 'GM', 'CD', 'PM', 'QsEng', 'AccCMG'],
+    roles: ['SuperAdmin', 'Admin', 'MD', 'GM', 'CD', 'PM', 'QsEng', 'AccCMG'],
   },
   {
     label: 'Bank Bonds',
     icon: Shield,
     path: '/bonds',
-    roles: ['MD', 'GM', 'CD', 'PM', 'AccCMG'],
+    roles: ['SuperAdmin', 'Admin', 'MD', 'GM', 'CD', 'PM', 'AccCMG'],
   },
   {
     label: 'Payments',
     icon: CreditCard,
     path: '/payments',
-    roles: ['MD', 'GM', 'CD', 'PM', 'QsEng', 'AccCMG'],
+    roles: ['SuperAdmin', 'Admin', 'MD', 'GM', 'CD', 'PM', 'QsEng', 'AccCMG'],
   },
   {
     label: 'Change Orders',
     icon: GitPullRequest,
     path: '/change-orders',
-    roles: ['MD', 'GM', 'CD', 'PM', 'QsEng', 'AccCMG'],
+    roles: ['SuperAdmin', 'Admin', 'MD', 'GM', 'CD', 'PM', 'QsEng', 'AccCMG'],
   },
   {
     label: 'Reports',
     icon: BarChart3,
     path: '/reports',
-    roles: ['MD', 'GM', 'CD', 'PM', 'QsEng', 'AccCMG'],
+    roles: ['SuperAdmin', 'Admin', 'MD', 'GM', 'CD', 'PM', 'QsEng', 'AccCMG'],
+  },
+  {
+    label: 'User Mgmt',
+    icon: Users,
+    path: '/admin',
+    roles: ['SuperAdmin', 'Admin'],
   },
 ]
 
 export default function Sidebar({ collapsed, onToggle }) {
-  const { currentUser } = useAuth()
+  const { userProfile } = useAuth()
   const location = useLocation()
 
-  const visibleItems = NAV_ITEMS.filter(item => item.roles.includes(currentUser.role))
+  const userRoles = userProfile?.role ?? []
+  const visibleItems = NAV_ITEMS.filter(item =>
+    item.roles.some(r => userRoles.includes(r))
+  )
 
   return (
     <aside
@@ -79,8 +88,8 @@ export default function Sidebar({ collapsed, onToggle }) {
       <nav className="flex-1 py-4 overflow-y-auto">
         <ul className="space-y-0.5 px-2">
           {visibleItems.map(({ label, icon: Icon, path }) => {
-            const isActive = path === '/'
-              ? location.pathname === '/'
+            const isActive = path === '/dashboard'
+              ? location.pathname === '/dashboard' || location.pathname === '/'
               : location.pathname.startsWith(path)
 
             return (
