@@ -7,6 +7,7 @@ export const USER_ROLES = [
   'GM',
   'CD',
   'PM',
+  'CM',
   'QsEng',
   'AccCMG',
 ] as const
@@ -26,6 +27,8 @@ export interface UserProfile {
   createdAt: Timestamp
   photoURL?: string
   isFirstUser: boolean
+  /** Phone number in E.164 format e.g. +66891234567 */
+  phone?: string
 }
 
 export interface AppMetaConfig {
@@ -49,6 +52,8 @@ export interface LegacyUser {
   id: string
   name: string
   role: UserRole
+  /** Full role list from Firestore (for filtering PM/CM in dropdowns) */
+  roles?: UserRole[]
   avatar: string
   assignedProjects: string[]
 }

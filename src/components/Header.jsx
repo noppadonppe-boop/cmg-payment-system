@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ChevronDown, LogOut, Shield, Clock } from 'lucide-react'
+import { ChevronDown, LogOut, Shield, Clock, Phone } from 'lucide-react'
 import { useAuth, ROLE_PERMISSIONS } from '../context/AuthContext'
 import { logout } from '../lib/authService'
 import { clsx } from 'clsx'
+import EditPhoneModal from './EditPhoneModal'
 
 export { ROLE_PERMISSIONS }
 
@@ -14,6 +15,7 @@ const ROLE_BADGE_COLORS = {
   GM:         'bg-indigo-100 text-indigo-700',
   CD:         'bg-blue-100 text-blue-700',
   PM:         'bg-emerald-100 text-emerald-700',
+  CM:         'bg-teal-100 text-teal-700',
   QsEng:      'bg-amber-100 text-amber-700',
   AccCMG:     'bg-rose-100 text-rose-700',
 }
@@ -37,8 +39,9 @@ function getPageTitle(pathname) {
 }
 
 export default function Header() {
-  const { currentUser, userProfile, sessionMinutesLeft } = useAuth()
+  const { currentUser, userProfile, sessionMinutesLeft, refreshProfile } = useAuth()
   const [open, setOpen] = useState(false)
+  const [showEditPhone, setShowEditPhone] = useState(false)
   const location  = useLocation()
   const navigate  = useNavigate()
   const title     = getPageTitle(location.pathname)
@@ -66,6 +69,7 @@ export default function Header() {
   }
 
   return (
+    <>
     <header className="flex items-center justify-between px-6 py-3.5 bg-white border-b border-slate-200 shrink-0">
       {/* Page Title */}
       <div>
@@ -143,6 +147,22 @@ export default function Header() {
                 </div>
               )}
 
+              {/* Edit Phone */}
+              <button
+                onClick={() => { setOpen(false); setShowEditPhone(true) }}
+                className="flex items-center gap-2.5 w-full px-4 py-3 text-left text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                <Phone size={14} className="text-slate-400" />
+                <span>
+                  {userProfile?.phone ? 'เปลี่ยนเบอร์โทรศัพท์' : 'เพิ่มเบอร์โทรศัพท์'}
+                </span>
+                {userProfile?.phone && (
+                  <span className="ml-auto text-xs text-slate-400 font-mono">
+                    {'XXX-XXX-' + userProfile.phone.replace(/\D/g, '').slice(-4)}
+                  </span>
+                )}
+              </button>
+
               {/* Logout */}
               <button
                 onClick={handleLogout}
@@ -158,5 +178,16 @@ export default function Header() {
         </div>
       </div>
     </header>
+
+    {/* Edit / Add phone modal */}
+    {showEditPhone && userProfile && (
+      <EditPhoneModal
+        uid={userProfile.uid}
+        currentPhone={userProfile.phone}
+        onSaved={() => { setShowEditPhone(false); refreshProfile().catch(() => {}) }}
+        onClose={() => setShowEditPhone(false)}
+      />
+    )}
+    </>
   )
 }

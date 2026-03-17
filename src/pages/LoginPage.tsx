@@ -1,8 +1,10 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useRef, type FormEvent } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { Eye, EyeOff, ArrowRight } from 'lucide-react'
 import { loginWithEmail, loginWithGoogle } from '../lib/authService'
 import { useAuth } from '../context/AuthContext'
+import PhoneVerificationModal from '../components/PhoneVerificationModal'
+import type { UserProfile } from '../types/auth'
 
 const ERROR_MESSAGES: Record<string, string> = {
   'auth/invalid-credential':   'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
@@ -42,12 +44,24 @@ export default function LoginPage() {
   const [busy,     setBusy]     = useState(false)
   const [error,    setError]    = useState('')
 
+  /** Profile pending phone OTP verification before navigating */
+  const [pendingProfile, setPendingProfile] = useState<UserProfile | null>(null)
+
+  /**
+   * Ref-based flag set BEFORE loginWithGoogle() resolves so the useEffect below
+   * never redirects while phone verification is in progress.
+   * (useState would be too slow — the effect fires before the next render.)
+   */
+  const awaitingPhoneRef = useRef(false)
+
   // Fallback: redirect if user arrives at /login while already logged-in + approved
   useEffect(() => {
     if (loading || !firebaseUser || !userProfile) return
+    // Block redirect while phone 2FA is pending (either mid-login or modal open)
+    if (awaitingPhoneRef.current || pendingProfile) return
     if (userProfile.status === 'pending')  { navigate('/pending',   { replace: true }); return }
     if (userProfile.status === 'approved') { navigate(from,         { replace: true }); return }
-  }, [firebaseUser, userProfile, loading, navigate, from])
+  }, [firebaseUser, userProfile, loading, navigate, from, pendingProfile])
 
   function redirectByStatus(status: string) {
     if (status === 'rejected') {
@@ -59,14 +73,22 @@ export default function LoginPage() {
     }
   }
 
+  /** Called after phone OTP is verified successfully */
+  function handlePhoneVerified() {
+    if (!pendingProfile) return
+    const status = pendingProfile.status
+    awaitingPhoneRef.current = false
+    setPendingProfile(null)
+    refreshProfile().catch(() => {})
+    redirectByStatus(status)
+  }
+
   async function handleEmailLogin(e: FormEvent) {
     e.preventDefault()
     setError('')
     setBusy(true)
     try {
-      // loginWithEmail returns the profile directly — use it for immediate navigation
       const profile = await loginWithEmail(email, password)
-      // Kick off context update in background (non-blocking)
       refreshProfile().catch(() => {})
       redirectByStatus(profile.status)
     } catch (err: unknown) {
@@ -79,13 +101,22 @@ export default function LoginPage() {
   async function handleGoogleLogin() {
     setError('')
     setBusy(true)
+    // Set the ref BEFORE the async Google popup so the useEffect never fires early
+    awaitingPhoneRef.current = true
     try {
-      // loginWithGoogle returns the profile directly — use it for immediate navigation
       const profile = await loginWithGoogle()
-      // For new Google users, profile may be pending; also refresh context
-      refreshProfile().catch(() => {})
-      redirectByStatus(profile.status)
+      // Only approved/pending accounts go through phone 2FA
+      if (profile.status === 'approved' || profile.status === 'pending') {
+        setPendingProfile(profile)
+        setBusy(false)
+        // awaitingPhoneRef stays true until handlePhoneVerified clears it
+      } else {
+        awaitingPhoneRef.current = false
+        refreshProfile().catch(() => {})
+        redirectByStatus(profile.status)
+      }
     } catch (err: unknown) {
+      awaitingPhoneRef.current = false
       const code = (err as { code?: string })?.code ?? (err as Error).message
       setError(friendlyError(code))
       setBusy(false)
@@ -93,6 +124,15 @@ export default function LoginPage() {
   }
 
   return (
+    <>
+    {/* Phone 2FA modal — shown after Google sign-in */}
+    {pendingProfile && (
+      <PhoneVerificationModal
+        userProfile={pendingProfile}
+        onVerified={handlePhoneVerified}
+      />
+    )}
+
     <div
       className="min-h-screen flex flex-col items-center justify-center p-4"
       style={{ background: 'linear-gradient(135deg, #0f1f3d 0%, #1a3560 40%, #0d2952 100%)' }}
@@ -214,5 +254,6 @@ export default function LoginPage() {
         © 2026 CMG Engineering &amp; Construction
       </p>
     </div>
+    </>
   )
 }

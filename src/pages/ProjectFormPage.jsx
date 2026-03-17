@@ -7,6 +7,7 @@ import {
 import { useData } from '../context/DataContext'
 import { useAuth } from '../context/AuthContext'
 import { FormField, Input, Textarea, Select, Toggle } from '../components/ui/FormField'
+import { AttachmentField } from '../components/ui/AttachmentField'
 import Button from '../components/ui/Button'
 import Card, { CardHeader } from '../components/ui/Card'
 import { clsx } from 'clsx'
@@ -28,7 +29,7 @@ const EMPTY_BOND = { percent: '', value: '', bankName: '', attachment: '', start
 const EMPTY_INSURANCE = { id: '', no: '', name: '', detail: '', type: '', note: '' }
 
 const EMPTY_FORM = {
-  name: '', location: '', pmId: '', cm: '', mainContractor: '', subContractor: '', clientName: '',
+  name: '', location: '', pmId: '', cmId: '', cm: '', mainContractor: '', subContractor: '', clientName: '',
   contractNo: '', poNo: '', contractValue: '', contractAttachment: '', startDate: '', finishDate: '',
   contractType: 'Lump Sum', retentionRequired: false, retentionPercent: '', contractNote: '',
   performanceBond: { ...EMPTY_BOND },
@@ -60,7 +61,7 @@ export default function ProjectFormPage() {
   const isEditing = !!id
   const navigate = useNavigate()
   const { getProject, addProject, updateProject } = useData()
-  const { can, USERS } = useAuth()
+  const { can, USERS, currentUser } = useAuth()
 
   const [activeTab, setActiveTab] = useState('general')
   const [form, setForm] = useState(EMPTY_FORM)
@@ -68,15 +69,19 @@ export default function ProjectFormPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const pmUsers = USERS.filter(u => u.role === 'PM')
+  const pmUsers = USERS.filter(u => (u.roles && u.roles.includes('PM')) || u.role === 'PM')
+  const cmUsers = USERS.filter(u => (u.roles && u.roles.includes('CM')) || u.role === 'CM')
 
   useEffect(() => {
     if (isEditing) {
       const project = getProject(id)
       if (project) {
+        const cmList = USERS.filter(u => (u.roles && u.roles.includes('CM')) || u.role === 'CM')
+        const resolvedCmId = project.cmId ?? (project.cm && cmList.find(u => u.name === project.cm)?.id) ?? ''
         setForm({
           ...EMPTY_FORM,
           ...project,
+          cmId: resolvedCmId,
           contractValue: project.contractValue ?? '',
           performanceBond: { ...EMPTY_BOND, ...(project.performanceBond || {}) },
           advanceBond:     { ...EMPTY_BOND, ...(project.advanceBond || {}) },
@@ -87,7 +92,7 @@ export default function ProjectFormPage() {
         })
       }
     }
-  }, [id, isEditing, getProject])
+  }, [id, isEditing, getProject, USERS])
 
   if (!can('canManageProjects')) {
     return (
@@ -139,8 +144,10 @@ export default function ProjectFormPage() {
       return
     }
     setSaving(true)
+    const selectedCmName = cmUsers.find(u => u.id === form.cmId)?.name ?? form.cm
     const payload = {
       ...form,
+      cm: selectedCmName,
       contractValue: parseFloat(parseCurrency(form.contractValue)) || 0,
       retentionPercent: parseFloat(form.retentionPercent) || 0,
     }
@@ -232,9 +239,9 @@ export default function ProjectFormPage() {
 
         {/* Tab Content */}
         <div className="p-6">
-          {activeTab === 'general'   && <TabGeneral   form={form} set={set} errors={errors} pmUsers={pmUsers} />}
-          {activeTab === 'contract'  && <TabContract  form={form} set={set} errors={errors} />}
-          {activeTab === 'bank-bond' && <TabBankBond  form={form} setBond={setBond} />}
+          {activeTab === 'general'   && <TabGeneral   form={form} set={set} errors={errors} pmUsers={pmUsers} cmUsers={cmUsers} />}
+          {activeTab === 'contract'  && <TabContract  form={form} set={set} errors={errors} projectId={id} currentUserId={currentUser?.id} />}
+          {activeTab === 'bank-bond' && <TabBankBond  form={form} setBond={setBond} projectId={id} currentUserId={currentUser?.id} />}
           {activeTab === 'insurance' && <TabInsurance form={form} setInsurance={setInsurance} />}
           {activeTab === 'tax'       && <TabTax       form={form} set={set} />}
           {activeTab === 'condition' && <TabCondition form={form} set={set} />}
@@ -279,7 +286,7 @@ export default function ProjectFormPage() {
 }
 
 /* ─── Part 1: General ─────────────────────────────────────────────────────── */
-function TabGeneral({ form, set, errors, pmUsers }) {
+function TabGeneral({ form, set, errors, pmUsers, cmUsers }) {
   return (
     <div className="space-y-6">
       <SectionTitle title="General Information" subtitle="Basic project and stakeholder details" />
@@ -311,11 +318,12 @@ function TabGeneral({ form, set, errors, pmUsers }) {
         </FormField>
 
         <FormField label="Construction Manager (CM)">
-          <Input
-            placeholder="Name of CM"
-            value={form.cm}
-            onChange={e => set('cm', e.target.value)}
-          />
+          <Select value={form.cmId} onChange={e => set('cmId', e.target.value)}>
+            <option value="">— Select CM —</option>
+            {cmUsers.map(u => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </Select>
         </FormField>
 
         <FormField label="Client Name" required error={errors.clientName}>
@@ -348,7 +356,7 @@ function TabGeneral({ form, set, errors, pmUsers }) {
 }
 
 /* ─── Part 2: Contract ────────────────────────────────────────────────────── */
-function TabContract({ form, set, errors }) {
+function TabContract({ form, set, errors, projectId, currentUserId }) {
   return (
     <div className="space-y-6">
       <SectionTitle title="Contract Details" subtitle="Financial and timeline information for the contract" />
@@ -398,17 +406,14 @@ function TabContract({ form, set, errors }) {
         </FormField>
 
         <FormField label="Contract Attachment">
-          <div className="flex items-center gap-2">
-            <Input
-              placeholder="Filename or URL"
-              value={form.contractAttachment}
-              onChange={e => set('contractAttachment', e.target.value)}
-              className="flex-1"
-            />
-            <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 text-sm transition-colors shrink-0">
-              <Paperclip size={14} /> Attach
-            </button>
-          </div>
+          <AttachmentField
+            value={form.contractAttachment}
+            onChange={v => set('contractAttachment', v)}
+            folder="contracts"
+            docId={projectId || ''}
+            uploadedBy={currentUserId || ''}
+            placeholder="Filename or URL หรือกด Upload"
+          />
         </FormField>
 
         <div className="md:col-span-2">
@@ -450,7 +455,7 @@ function TabContract({ form, set, errors }) {
 }
 
 /* ─── Part 3: Bank Bond ───────────────────────────────────────────────────── */
-function TabBankBond({ form, setBond }) {
+function TabBankBond({ form, setBond, projectId, currentUserId }) {
   const bonds = [
     { key: 'performanceBond', label: 'Performance Bond', color: 'blue' },
     { key: 'advanceBond',     label: 'Advance Bond',     color: 'amber' },
@@ -468,6 +473,8 @@ function TabBankBond({ form, setBond }) {
             color={color}
             data={form[key]}
             onChange={(field, val) => setBond(key, field, val)}
+            projectId={projectId}
+            currentUserId={currentUserId}
           />
         ))}
       </div>
@@ -475,7 +482,7 @@ function TabBankBond({ form, setBond }) {
   )
 }
 
-function BondSection({ label, color, data, onChange }) {
+function BondSection({ label, color, data, onChange, projectId, currentUserId }) {
   const colorMap = {
     blue:    'border-blue-200 bg-blue-50/40',
     amber:   'border-amber-200 bg-amber-50/40',
@@ -535,10 +542,13 @@ function BondSection({ label, color, data, onChange }) {
         </FormField>
 
         <FormField label="Attachment">
-          <Input
-            placeholder="Filename or URL"
+          <AttachmentField
             value={data.attachment}
-            onChange={e => onChange('attachment', e.target.value)}
+            onChange={v => onChange('attachment', v)}
+            folder="bonds"
+            docId={projectId || ''}
+            uploadedBy={currentUserId || ''}
+            placeholder="Filename or URL หรือกด Upload"
           />
         </FormField>
 

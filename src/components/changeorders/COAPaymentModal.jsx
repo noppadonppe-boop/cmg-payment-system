@@ -7,6 +7,7 @@ import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
+import { AttachmentField } from '../ui/AttachmentField'
 import { Modal } from '../payments/PaymentCreateModal'
 import PaymentCreateModal from '../payments/PaymentCreateModal'
 import ApproveModal from '../payments/ApproveModal'
@@ -28,7 +29,7 @@ function fmtDate(d) {
 
 export default function COAPaymentModal({ coa, onClose }) {
   const { projects, payments, addPayment } = useData()
-  const { currentUser, USERS } = useAuth()
+  const { currentUser, USERS, can } = useAuth()
 
   const project    = projects.find(p => p.id === coa.projectId)
   const coaPayments = payments.filter(p => p.coaId === coa.id && p.type === 'coa')
@@ -38,9 +39,9 @@ export default function COAPaymentModal({ coa, onClose }) {
     .reduce((s, p) => s + (p.balanceValue || 0), 0)
   const balance = (coa.value || 0) - totalReceived
 
-  const isPM     = currentUser.role === 'PM'
-  const isQsEng  = currentUser.role === 'QsEng'
-  const isAccCMG = currentUser.role === 'AccCMG'
+  const isPM     = can('canApprovePayments')
+  const isQsEng  = can('canCreateClaims')
+  const isAccCMG = can('canUpdateBonds')
 
   // Sub-modal state
   const [createOpen, setCreateOpen]           = useState(false)
@@ -349,11 +350,13 @@ function COAPaymentCreateModal({ coa, project, onClose }) {
           </FormFieldSimple>
 
           <FormFieldSimple label="Attachment">
-            <input
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400"
-              placeholder="Filename or URL"
+            <AttachmentField
               value={form.attachment}
-              onChange={e => set('attachment', e.target.value)}
+              onChange={v => set('attachment', v)}
+              folder="payments"
+              docId={coa?.projectId}
+              uploadedBy={currentUser?.id}
+              placeholder="Filename or URL หรือกด Upload"
             />
           </FormFieldSimple>
 

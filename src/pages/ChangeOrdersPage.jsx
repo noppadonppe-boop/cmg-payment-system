@@ -53,8 +53,8 @@ export default function ChangeOrdersPage() {
   const [convertCOR, setConvertCOR]         = useState(null)
   const [coaPaymentCOA, setCoaPaymentCOA]   = useState(null)
 
-  const isPM    = currentUser.role === 'PM'
-  const isQsEng = currentUser.role === 'QsEng'
+  const isPM    = can('canApprovePayments')
+  const isQsEng = can('canCreateClaims')
 
   const visibleProjects = projects.filter(p => hasProjectAccess(p.id))
 

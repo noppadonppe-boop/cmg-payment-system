@@ -12,6 +12,7 @@ import Badge from '../components/ui/Badge'
 import { clsx } from 'clsx'
 import PaymentDetailModal from '../components/payments/PaymentDetailModal'
 import PaymentCreateModal from '../components/payments/PaymentCreateModal'
+import PaymentEditModal from '../components/payments/PaymentEditModal'
 import InvoiceModal from '../components/payments/InvoiceModal'
 import ReceivedModal from '../components/payments/ReceivedModal'
 import ApproveModal from '../components/payments/ApproveModal'
@@ -50,6 +51,7 @@ export default function PaymentsPage() {
   const [invoicePayment, setInvoicePayment] = useState(null)
   const [receivedPayment, setReceivedPayment] = useState(null)
   const [approvePayment, setApprovePayment] = useState(null)
+  const [editPayment, setEditPayment] = useState(null)
 
   const visibleProjects = projects.filter(p => hasProjectAccess(p.id))
 
@@ -57,7 +59,10 @@ export default function PaymentsPage() {
     if (!hasProjectAccess(pay.projectId)) return false
     if (pay.type !== 'main') return false
     if (selectedProjectId !== 'all' && pay.projectId !== selectedProjectId) return false
+    // ถ้าเลือกสถานะเฉพาะ ให้กรองตามนั้น
     if (statusFilter !== 'all' && pay.status !== statusFilter) return false
+    // ค่าเริ่มต้น (all) ให้ซ่อนรายการที่เสร็จสมบูรณ์แล้ว (Received) เพื่อไม่โชว์ประวัติเก่า
+    if (statusFilter === 'all' && pay.status === 'Received') return false
     return true
   })
 
@@ -79,8 +84,8 @@ export default function PaymentsPage() {
   // What action buttons to show per payment
   const getActions = (pay) => {
     const actions = []
-    if (isQsEng && pay.status === 'In Progress' && pay.createdBy === currentUser.id) {
-      // QsEng can edit their own pending claim — reuse create modal in edit mode
+    if (isQsEng && pay.status === 'Rejected') {
+      actions.push({ label: 'Edit / Resubmit', variant: 'primary', onClick: () => setEditPayment(pay) })
     }
     if (isPM && pay.status === 'In Progress') {
       actions.push({ label: 'Review', variant: 'primary', onClick: () => setApprovePayment(pay) })
@@ -207,7 +212,16 @@ export default function PaymentsPage() {
             if (action === 'approve') setApprovePayment(detailPayment)
             if (action === 'invoice') setInvoicePayment(detailPayment)
             if (action === 'received') setReceivedPayment(detailPayment)
+            if (action === 'edit') setEditPayment(detailPayment)
           }}
+        />
+      )}
+      {editPayment && (
+        <PaymentEditModal
+          payment={editPayment}
+          projects={visibleProjects}
+          onClose={() => setEditPayment(null)}
+          onSaved={() => setEditPayment(null)}
         />
       )}
       {approvePayment && (
