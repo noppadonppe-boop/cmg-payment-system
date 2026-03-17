@@ -54,7 +54,16 @@ export default function Header() {
     navigate('/login', { replace: true })
   }
 
-  const sessionWarn = sessionMinutesLeft > 0 && sessionMinutesLeft <= 10
+  const sessionWarn = sessionMinutesLeft > 0 && sessionMinutesLeft <= 60
+
+  function formatSessionTime(mins) {
+    if (mins >= 60) {
+      const h = Math.floor(mins / 60)
+      const m = mins % 60
+      return m > 0 ? `${h} ชม. ${m} นาที` : `${h} ชั่วโมง`
+    }
+    return `${mins} นาที`
+  }
 
   return (
     <header className="flex items-center justify-between px-6 py-3.5 bg-white border-b border-slate-200 shrink-0">
@@ -69,7 +78,7 @@ export default function Header() {
         {sessionWarn && (
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-lg text-amber-600 text-xs font-medium">
             <Clock size={12} />
-            เซสชันหมดใน {sessionMinutesLeft} นาที
+            เซสชันหมดใน {formatSessionTime(sessionMinutesLeft)}
           </div>
         )}
 
@@ -130,7 +139,7 @@ export default function Header() {
               {sessionMinutesLeft > 0 && (
                 <div className="px-4 py-2 border-b border-slate-100 flex items-center gap-2 text-xs text-slate-500">
                   <Clock size={12} className={sessionWarn ? 'text-amber-500' : 'text-slate-400'} />
-                  <span>เซสชันหมดใน <strong className={sessionWarn ? 'text-amber-600' : ''}>{sessionMinutesLeft}</strong> นาที</span>
+                  <span>เซสชันหมดใน <strong className={sessionWarn ? 'text-amber-600' : ''}>{formatSessionTime(sessionMinutesLeft)}</strong></span>
                 </div>
               )}
 

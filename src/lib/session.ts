@@ -1,5 +1,5 @@
 const SESSION_KEY = 'cmg_payment_session_expires'
-const SESSION_DURATION_MS = 60 * 60 * 1000 // 1 hour
+const SESSION_DURATION_MS = 24 * 60 * 60 * 1000 // 1 day
 
 /**
  * Call this IMMEDIATELY after sign-in, before any awaits,

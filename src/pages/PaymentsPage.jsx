@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   Plus, ChevronDown, CreditCard, CheckCircle2, Clock,
   Send, Banknote, Filter, AlertCircle, Eye, ArrowRight,
-  FileText, User, Calendar, Hash
+  FileText, User, Calendar, Hash, Trash2
 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { useAuth } from '../context/AuthContext'
@@ -34,8 +34,14 @@ function fmtDate(d) {
 }
 
 export default function PaymentsPage() {
-  const { projects, payments, getProjectPayments } = useData()
+  const { projects, payments, getProjectPayments, deletePayment } = useData()
   const { currentUser, can, hasProjectAccess, USERS } = useAuth()
+  const isSuperAdmin = currentUser?.role === 'SuperAdmin'
+
+  async function handleDeletePayment(pay) {
+    if (!window.confirm(`ยืนยันการลบ Payment Claim "${pay.paymentNo}"?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) return
+    await deletePayment(pay.id)
+  }
 
   const [selectedProjectId, setSelectedProjectId] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -176,7 +182,9 @@ export default function PaymentsPage() {
                 creator={creator}
                 sc={sc}
                 actions={actions}
+                canDelete={isSuperAdmin}
                 onView={() => setDetailPayment(pay)}
+                onDelete={() => handleDeletePayment(pay)}
               />
             )
           })}
@@ -224,7 +232,7 @@ export default function PaymentsPage() {
   )
 }
 
-function PaymentRow({ pay, project, creator, sc, actions, onView }) {
+function PaymentRow({ pay, project, creator, sc, actions, canDelete, onView, onDelete }) {
   const StatusIcon = sc.icon
 
   return (
@@ -298,6 +306,15 @@ function PaymentRow({ pay, project, creator, sc, actions, onView }) {
                   {a.label}
                 </Button>
               ))}
+              {canDelete && (
+                <button
+                  onClick={onDelete}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-rose-400 hover:text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-lg transition-colors"
+                  title="ลบรายการ (SuperAdmin)"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
             </div>
           </div>
         </div>

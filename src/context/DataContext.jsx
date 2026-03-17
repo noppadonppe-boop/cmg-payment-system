@@ -369,6 +369,10 @@ export function DataProvider({ children }) {
     await updateDoc(docRef('payments', id), updates)
   }
 
+  const deletePayment = async (id) => {
+    await deleteDoc(docRef('payments', id))
+  }
+
   // ── CORs ──────────────────────────────────────────────────────────────────
   const getProjectCORs = (projectId) => cors.filter(c => c.projectId === projectId)
 
@@ -382,6 +386,10 @@ export function DataProvider({ children }) {
 
   const updateCOR = async (id, updates) => {
     await updateDoc(docRef('cors', id), updates)
+  }
+
+  const deleteCOR = async (id) => {
+    await deleteDoc(docRef('cors', id))
   }
 
   // ── COAs ──────────────────────────────────────────────────────────────────
@@ -398,14 +406,18 @@ export function DataProvider({ children }) {
     return newCOA
   }
 
+  const deleteCOA = async (id) => {
+    await deleteDoc(docRef('coas', id))
+  }
+
   return (
     <DataContext.Provider value={{
       loading,
       projects, addProject, updateProject, deleteProject, getProject,
       bondStatuses, getBondStatus, updateBondStatus,
-      payments, getProjectPayments, addPayment, updatePayment,
-      cors, getProjectCORs, addCOR, updateCOR,
-      coas, getProjectCOAs, addCOA,
+      payments, getProjectPayments, addPayment, updatePayment, deletePayment,
+      cors, getProjectCORs, addCOR, updateCOR, deleteCOR,
+      coas, getProjectCOAs, addCOA, deleteCOA,
     }}>
       {children}
     </DataContext.Provider>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, FolderOpen, MapPin, User, Calendar, TrendingUp, Edit, Eye } from 'lucide-react'
+import { Plus, Search, FolderOpen, MapPin, User, Calendar, TrendingUp, Edit, Eye, Trash2 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { useAuth } from '../context/AuthContext'
 import Button from '../components/ui/Button'
@@ -21,10 +21,16 @@ function formatDate(d) {
 }
 
 export default function ProjectsPage() {
-  const { projects } = useData()
-  const { can, hasProjectAccess } = useAuth()
+  const { projects, deleteProject } = useData()
+  const { can, hasProjectAccess, currentUser } = useAuth()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
+  const isSuperAdmin = currentUser?.role === 'SuperAdmin'
+
+  async function handleDeleteProject(id, name) {
+    if (!window.confirm(`ยืนยันการลบโปรเจกต์ "${name}"?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) return
+    await deleteProject(id)
+  }
 
   const visible = projects.filter(p =>
     hasProjectAccess(p.id) &&
@@ -90,8 +96,10 @@ export default function ProjectsPage() {
               key={project.id}
               project={project}
               canEdit={can('canManageProjects')}
+              canDelete={isSuperAdmin}
               onView={() => navigate(`/projects/${project.id}`)}
               onEdit={() => navigate(`/projects/${project.id}/edit`)}
+              onDelete={() => handleDeleteProject(project.id, project.name)}
             />
           ))}
         </div>
@@ -100,7 +108,7 @@ export default function ProjectsPage() {
   )
 }
 
-function ProjectCard({ project, canEdit, onView, onEdit }) {
+function ProjectCard({ project, canEdit, canDelete, onView, onEdit, onDelete }) {
   return (
     <Card padding={false} className="overflow-hidden hover:shadow-md transition-shadow duration-200">
       {/* Color bar */}
@@ -145,6 +153,11 @@ function ProjectCard({ project, canEdit, onView, onEdit }) {
           {canEdit && (
             <button onClick={onEdit} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 font-medium transition-colors ml-2">
               <Edit size={13} /> Edit
+            </button>
+          )}
+          {canDelete && (
+            <button onClick={onDelete} className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-700 font-medium transition-colors ml-2">
+              <Trash2 size={13} /> Delete
             </button>
           )}
         </div>

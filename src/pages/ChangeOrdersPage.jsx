@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   Plus, ChevronDown, GitPullRequest, CheckCircle2, Clock,
   AlertCircle, XCircle, ArrowRight, FileText, User,
-  Calendar, Banknote, Eye, GitMerge, CreditCard
+  Calendar, Banknote, Eye, GitMerge, CreditCard, Trash2
 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { useAuth } from '../context/AuthContext'
@@ -32,8 +32,19 @@ function fmtDate(d) {
 }
 
 export default function ChangeOrdersPage() {
-  const { projects, cors, coas, payments } = useData()
+  const { projects, cors, coas, payments, deleteCOR, deleteCOA } = useData()
   const { currentUser, can, hasProjectAccess, USERS } = useAuth()
+  const isSuperAdmin = currentUser?.role === 'SuperAdmin'
+
+  async function handleDeleteCOR(cor) {
+    if (!window.confirm(`ยืนยันการลบ COR "${cor.corNo}"?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) return
+    await deleteCOR(cor.id)
+  }
+
+  async function handleDeleteCOA(coa) {
+    if (!window.confirm(`ยืนยันการลบ COA "${coa.coaNo}"?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) return
+    await deleteCOA(coa.id)
+  }
 
   const [selectedProjectId, setSelectedProjectId] = useState('all')
   const [tab, setTab]                 = useState('cor')  // 'cor' | 'coa'
@@ -169,8 +180,10 @@ export default function ChangeOrdersPage() {
                   sc={sc}
                   coa={coa}
                   canConvert={isPM && !cor.convertedToCOA && cor.status === 'Submitted'}
+                  canDelete={isSuperAdmin}
                   onView={() => setDetailCOR(cor)}
                   onConvert={() => setConvertCOR(cor)}
+                  onDelete={() => handleDeleteCOR(cor)}
                 />
               )
             })}
@@ -203,7 +216,9 @@ export default function ChangeOrdersPage() {
                   approver={approver}
                   payments={coaPays}
                   currentUser={currentUser}
+                  canDelete={isSuperAdmin}
                   onManagePayment={() => setCoaPaymentCOA(coa)}
+                  onDelete={() => handleDeleteCOA(coa)}
                 />
               )
             })}
@@ -243,7 +258,7 @@ export default function ChangeOrdersPage() {
 }
 
 /* ─── COR Row ─────────────────────────────────────────────────────────────── */
-function CORRow({ cor, project, creator, sc, coa, canConvert, onView, onConvert }) {
+function CORRow({ cor, project, creator, sc, coa, canConvert, canDelete, onView, onConvert, onDelete }) {
   const StatusIcon = sc.icon
   return (
     <Card padding={false} className="overflow-hidden hover:shadow-md transition-shadow">
@@ -298,6 +313,15 @@ function CORRow({ cor, project, creator, sc, coa, canConvert, onView, onConvert 
                     Convert to COA
                   </Button>
                 )}
+                {canDelete && (
+                  <button
+                    onClick={onDelete}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-rose-400 hover:text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-lg transition-colors"
+                    title="ลบรายการ (SuperAdmin)"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -308,7 +332,7 @@ function CORRow({ cor, project, creator, sc, coa, canConvert, onView, onConvert 
 }
 
 /* ─── COA Row ─────────────────────────────────────────────────────────────── */
-function COARow({ coa, cor, project, approver, payments, currentUser, onManagePayment }) {
+function COARow({ coa, cor, project, approver, payments, currentUser, canDelete, onManagePayment, onDelete }) {
   const latestPay   = payments[payments.length - 1]
   const totalPaid   = payments.filter(p => p.status === 'Received').reduce((s, p) => s + (p.balanceValue || 0), 0)
   const balance     = (coa.value || 0) - totalPaid
@@ -356,11 +380,22 @@ function COARow({ coa, cor, project, approver, payments, currentUser, onManagePa
                 </div>
               </div>
 
-              {canAct && (
-                <Button variant="secondary" size="sm" icon={CreditCard} onClick={onManagePayment}>
-                  Payments
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {canAct && (
+                  <Button variant="secondary" size="sm" icon={CreditCard} onClick={onManagePayment}>
+                    Payments
+                  </Button>
+                )}
+                {canDelete && (
+                  <button
+                    onClick={onDelete}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-rose-400 hover:text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-lg transition-colors"
+                    title="ลบรายการ (SuperAdmin)"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
