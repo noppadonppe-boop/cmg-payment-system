@@ -1,11 +1,12 @@
 import {
-  FileText, User, Calendar, Paperclip, CheckCircle2,
+  FileText, User, Calendar, CheckCircle2,
   Clock, Send, Banknote, XCircle, Hash, AlertCircle
 } from 'lucide-react'
 import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
+import { AttachmentLink } from '../ui/AttachmentField'
 import { Modal } from './PaymentCreateModal'
 import { clsx } from 'clsx'
 
@@ -30,7 +31,7 @@ function InfoRow({ label, value }) {
 
 export default function PaymentDetailModal({ payment, onClose, onAction }) {
   const { projects } = useData()
-  const { currentUser, USERS } = useAuth()
+  const { currentUser, USERS, can } = useAuth()
 
   const project = projects.find(p => p.id === payment.projectId)
   const creator = USERS.find(u => u.id === payment.createdBy)
@@ -38,9 +39,9 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
   const receiver = USERS.find(u => u.id === payment.receivedBy)
   const rejecter = USERS.find(u => u.id === payment.rejectedBy)
 
-  const isPM     = currentUser.role === 'PM'
-  const isQsEng  = currentUser.role === 'QsEng'
-  const isAccCMG = currentUser.role === 'AccCMG'
+  const isPM     = can('canApprovePayments')
+  const isQsEng  = can('canCreateClaims')
+  const isAccCMG = can('canUpdateBonds')
 
   return (
     <Modal
@@ -70,7 +71,7 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
             {payment.attachment && (
               <InfoRow
                 label="Attachment"
-                value={<a href="#" className="flex items-center gap-1 text-blue-600 hover:underline text-sm"><Paperclip size={12}/>{payment.attachment}</a>}
+                value={<AttachmentLink value={payment.attachment} className="flex items-center gap-1" />}
               />
             )}
             {payment.note && <InfoRow label="Note" value={`"${payment.note}"`} />}
@@ -94,12 +95,19 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
 
           {/* Rejection notice */}
           {payment.status === 'Rejected' && (
-            <div className="mt-3 flex items-start gap-2.5 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2.5">
-              <XCircle size={15} className="text-rose-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-semibold text-rose-700">Rejected by {rejecter?.name ?? 'PM'} on {fmtDate(payment.rejectedAt)}</p>
-                {payment.rejectionNote && <p className="text-xs text-rose-600 mt-0.5">"{payment.rejectionNote}"</p>}
+            <div className="mt-3 space-y-3">
+              <div className="flex items-start gap-2.5 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2.5">
+                <XCircle size={15} className="text-rose-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-rose-700">Rejected by {rejecter?.name ?? 'PM'} on {fmtDate(payment.rejectedAt)}</p>
+                  {payment.rejectionNote && <p className="text-xs text-rose-600 mt-0.5">"{payment.rejectionNote}"</p>}
+                </div>
               </div>
+              {isQsEng && (
+                <Button variant="primary" size="sm" onClick={() => onAction?.('edit')}>
+                  Edit & Resubmit (flow เริ่มใหม่)
+                </Button>
+              )}
             </div>
           )}
 
@@ -164,7 +172,7 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
               {payment.receivedAttachment && (
                 <InfoRow
                   label="Receipt / Bank Slip"
-                  value={<a href="#" className="flex items-center gap-1 text-blue-600 hover:underline text-sm"><Paperclip size={12}/>{payment.receivedAttachment}</a>}
+                  value={<AttachmentLink value={payment.receivedAttachment} className="flex items-center gap-1" />}
                 />
               )}
               {payment.receivedNote && <InfoRow label="Note" value={`"${payment.receivedNote}"`} />}

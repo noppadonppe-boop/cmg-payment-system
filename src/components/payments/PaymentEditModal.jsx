@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, Save, Calculator } from 'lucide-react'
+import { deleteField } from 'firebase/firestore'
 import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { FormField, Input, Textarea, Select } from '../ui/FormField'
 import { AttachmentField } from '../ui/AttachmentField'
 import Button from '../ui/Button'
+import { Modal } from './PaymentCreateModal'
 import { clsx } from 'clsx'
 
 function parseCurrency(val) {
@@ -17,12 +19,12 @@ function fmtInput(val) {
   return n.toLocaleString('en-US')
 }
 
-export default function PaymentCreateModal({ projects, onClose }) {
-  const { addPayment, payments } = useData()
+export default function PaymentEditModal({ payment, projects, onClose, onSaved }) {
+  const { updatePayment } = useData()
   const { currentUser } = useAuth()
 
   const [form, setForm] = useState({
-    projectId: projects[0]?.id ?? '',
+    projectId: '',
     paymentNo: '',
     detail: '',
     value: '',
@@ -34,18 +36,23 @@ export default function PaymentCreateModal({ projects, onClose }) {
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
 
+  useEffect(() => {
+    if (!payment) return
+    setForm({
+      projectId: payment.projectId ?? '',
+      paymentNo: payment.paymentNo ?? '',
+      detail: payment.detail ?? '',
+      value: payment.value != null ? String(payment.value) : '',
+      advanceDeduction: payment.advanceDeduction != null ? String(payment.advanceDeduction) : '',
+      retentionReduce: payment.retentionReduce != null ? String(payment.retentionReduce) : '',
+      attachment: payment.attachment ?? '',
+      note: payment.note ?? '',
+    })
+  }, [payment])
+
   const set = (k, v) => {
     setForm(p => ({ ...p, [k]: v }))
     if (errors[k]) setErrors(p => { const e = { ...p }; delete e[k]; return e })
-  }
-
-  // Auto-generate payment number based on project
-  const autoGenNo = () => {
-    const proj = projects.find(p => p.id === form.projectId)
-    if (!proj) return
-    const existing = payments.filter(p => p.projectId === form.projectId && p.type === 'main').length
-    const prefix = proj.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 3)
-    set('paymentNo', `PMT-${prefix}-${String(existing + 1).padStart(3, '0')}`)
   }
 
   const value = parseCurrency(form.value)
@@ -64,33 +71,39 @@ export default function PaymentCreateModal({ projects, onClose }) {
   }
 
   const handleSubmit = async () => {
-    if (!validate()) return
+    if (!validate() || !payment?.id) return
     setSaving(true)
-    await new Promise(r => setTimeout(r, 350))
-    addPayment({
-      projectId:        form.projectId,
-      type:             'main',
-      paymentNo:        form.paymentNo,
-      detail:           form.detail,
-      value,
-      advanceDeduction: adv,
-      retentionReduce:  ret,
-      balanceValue:     balance,
-      attachment:       form.attachment,
-      note:             form.note,
-      status:           'In Progress',
-      createdBy:        currentUser.id,
-      invoiceNo:        null, invoiceDueDate: null, invoiceNote: null,
-      invoiceSubmittedAt: null,
-      receivedDate: null, receivedAttachment: null, receivedNote: null,
-      receivedBy: null, receivedAt: null,
-    })
-    setSaving(false)
-    onClose()
+    try {
+      await updatePayment(payment.id, {
+        projectId:        form.projectId,
+        paymentNo:        form.paymentNo,
+        detail:           form.detail,
+        value,
+        advanceDeduction: adv,
+        retentionReduce:  ret,
+        balanceValue:     balance,
+        attachment:       form.attachment,
+        note:             form.note,
+        status:           'In Progress',
+        rejectedAt:       deleteField(),
+        rejectionNote:    deleteField(),
+        rejectedBy:       deleteField(),
+      })
+      onSaved?.()
+      onClose()
+    } finally {
+      setSaving(false)
+    }
   }
 
+  if (!payment) return null
+
   return (
-    <Modal title="New Payment Claim" subtitle="Step 1 — Submit for PM Approval" onClose={onClose}>
+    <Modal
+      title="Edit Payment Claim"
+      subtitle="แก้ไขแล้วส่งให้ PM อนุมัติอีกครั้ง (flow เริ่มใหม่)"
+      onClose={onClose}
+    >
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Project" required error={errors.projectId} className="sm:col-span-2">
@@ -101,22 +114,12 @@ export default function PaymentCreateModal({ projects, onClose }) {
           </FormField>
 
           <FormField label="Payment No." required error={errors.paymentNo}>
-            <div className="flex gap-2">
-              <Input
-                placeholder="e.g. PMT-CPT-001"
-                value={form.paymentNo}
-                onChange={e => set('paymentNo', e.target.value)}
-                error={errors.paymentNo}
-                className="flex-1"
-              />
-              <button
-                type="button"
-                onClick={autoGenNo}
-                className="px-3 py-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 shrink-0 transition-colors"
-              >
-                Auto
-              </button>
-            </div>
+            <Input
+              placeholder="e.g. PMT-CPT-001"
+              value={form.paymentNo}
+              onChange={e => set('paymentNo', e.target.value)}
+              error={errors.paymentNo}
+            />
           </FormField>
 
           <FormField label="Attachment">
@@ -133,7 +136,7 @@ export default function PaymentCreateModal({ projects, onClose }) {
           <FormField label="Description" required error={errors.detail} className="sm:col-span-2">
             <Textarea
               rows={2}
-              placeholder="Progress claim description, work items completed..."
+              placeholder="Progress claim description..."
               value={form.detail}
               onChange={e => set('detail', e.target.value)}
               error={errors.detail}
@@ -141,7 +144,6 @@ export default function PaymentCreateModal({ projects, onClose }) {
           </FormField>
         </div>
 
-        {/* Financial Calculation Section */}
         <div className="rounded-xl border border-slate-200 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-700">
             <Calculator size={14} className="text-slate-300" />
@@ -184,20 +186,12 @@ export default function PaymentCreateModal({ projects, onClose }) {
                 </div>
               </FormField>
             </div>
-
-            {/* Balance Display */}
             <div className={clsx(
               'flex items-center justify-between px-4 py-3 rounded-lg border',
               balance >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'
             )}>
-              <div className="text-sm text-slate-600">
-                <span className="font-medium">Balance Value</span>
-                <span className="text-slate-400 ml-2 text-xs">= Claim − Advance − Retention</span>
-              </div>
-              <span className={clsx(
-                'text-lg font-bold',
-                balance >= 0 ? 'text-emerald-700' : 'text-rose-600'
-              )}>
+              <span className="text-sm text-slate-600 font-medium">Balance Value</span>
+              <span className={clsx('text-lg font-bold', balance >= 0 ? 'text-emerald-700' : 'text-rose-600')}>
                 ฿{balance.toLocaleString('en-US')}
               </span>
             </div>
@@ -212,40 +206,9 @@ export default function PaymentCreateModal({ projects, onClose }) {
       <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button variant="primary" icon={Save} loading={saving} onClick={handleSubmit}>
-          Submit for Approval
+          Save & Resubmit for Approval
         </Button>
       </div>
     </Modal>
-  )
-}
-
-export function Modal({ title, subtitle, onClose, children, maxWidth = 'max-w-2xl' }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-
-      {/* Panel */}
-      <div className={clsx('relative bg-white rounded-2xl shadow-2xl w-full flex flex-col max-h-[90vh]', maxWidth)}>
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-100 shrink-0">
-          <div>
-            <h2 className="text-base font-bold text-slate-800">{title}</h2>
-            {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors shrink-0 mt-0.5"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          {children}
-        </div>
-      </div>
-    </div>
   )
 }

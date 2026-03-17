@@ -2,11 +2,12 @@ import { useState } from 'react'
 import {
   Shield, CheckCircle2, Clock, XCircle, AlertCircle,
   ChevronDown, ChevronUp, Save, Check, Building2,
-  MapPin, Calendar, Banknote, Paperclip, Lock
+  MapPin, Calendar, Banknote, Lock
 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { useAuth } from '../context/AuthContext'
 import { FormField, Input, Select, Textarea } from '../components/ui/FormField'
+import { AttachmentLink } from '../components/ui/AttachmentField'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
@@ -61,7 +62,7 @@ function computeStats(bondStatuses, projects, hasProjectAccess) {
 export default function BondStatusPage() {
   const { projects, bondStatuses, updateBondStatus } = useData()
   const { currentUser, can, hasProjectAccess } = useAuth()
-  const isAccCMG = currentUser.role === 'AccCMG'
+  const isAccCMG = can('canUpdateBonds')
 
   // Per-project expanded state
   const [expanded, setExpanded] = useState(() => {
@@ -278,9 +279,7 @@ export default function BondStatusPage() {
                             </div>
                             {projectBond?.attachment && (
                               <div className="col-span-2">
-                                <a href="#" className={clsx('flex items-center gap-1 font-medium hover:underline', hc.text)}>
-                                  <Paperclip size={10} /> {projectBond.attachment}
-                                </a>
+                                <AttachmentLink value={projectBond.attachment} className={clsx('flex items-center gap-1 font-medium', hc.text)} />
                               </div>
                             )}
                           </div>

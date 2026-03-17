@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { GitMerge, Save, Paperclip, CheckCircle2, GitPullRequest } from 'lucide-react'
+import { GitMerge, Save, CheckCircle2, GitPullRequest } from 'lucide-react'
 import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { FormField, Input, Textarea } from '../ui/FormField'
+import { AttachmentField } from '../ui/AttachmentField'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
 import { Modal } from '../payments/PaymentCreateModal'
@@ -159,17 +160,14 @@ export default function ConvertToCOAModal({ cor, onClose, onDone }) {
               </FormField>
 
               <FormField label="Attachment (Client Approval Doc)">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Filename or URL"
-                    value={form.attachment}
-                    onChange={e => set('attachment', e.target.value)}
-                    className="flex-1"
-                  />
-                  <button className="flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 text-xs shrink-0">
-                    <Paperclip size={13} />
-                  </button>
-                </div>
+                <AttachmentField
+                  value={form.attachment}
+                  onChange={v => set('attachment', v)}
+                  folder="coa"
+                  docId={cor?.id}
+                  uploadedBy={currentUser?.id}
+                  placeholder="Filename or URL หรือกด Upload"
+                />
               </FormField>
 
               <FormField label="Note">

@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { CheckCircle2, Calendar, Paperclip, Banknote } from 'lucide-react'
+import { CheckCircle2, Calendar, Banknote } from 'lucide-react'
 import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { FormField, Input, Textarea } from '../ui/FormField'
+import { AttachmentField } from '../ui/AttachmentField'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
 import { Modal } from './PaymentCreateModal'
@@ -118,17 +119,14 @@ export default function ReceivedModal({ payment, onClose }) {
             </FormField>
 
             <FormField label="Receipt / Bank Slip Attachment">
-              <div className="flex items-center gap-2">
-                <Input
-                  placeholder="Filename or URL"
-                  value={form.receivedAttachment}
-                  onChange={e => set('receivedAttachment', e.target.value)}
-                  className="flex-1"
-                />
-                <button className="flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 text-xs shrink-0">
-                  <Paperclip size={13} />
-                </button>
-              </div>
+              <AttachmentField
+                value={form.receivedAttachment}
+                onChange={v => set('receivedAttachment', v)}
+                folder="payments"
+                docId={payment?.projectId}
+                uploadedBy={currentUser?.id}
+                placeholder="Filename or URL หรือกด Upload"
+              />
             </FormField>
 
             <FormField label="Note" className="sm:col-span-2">

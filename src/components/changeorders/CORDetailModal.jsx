@@ -31,7 +31,7 @@ function InfoRow({ label, value }) {
 
 export default function CORDetailModal({ cor, onClose, onConvert }) {
   const { projects, coas } = useData()
-  const { currentUser, USERS } = useAuth()
+  const { currentUser, USERS, can } = useAuth()
 
   const project  = projects.find(p => p.id === cor.projectId)
   const creator  = USERS.find(u => u.id === cor.createdBy)
@@ -41,7 +41,7 @@ export default function CORDetailModal({ cor, onClose, onConvert }) {
   const sc = COR_STATUS_CONFIG[cor.status] ?? COR_STATUS_CONFIG['Prepare doc']
   const StatusIcon = sc.icon
 
-  const isPM       = currentUser.role === 'PM'
+  const isPM       = can('canApprovePayments')
   const canConvert = isPM && !cor.convertedToCOA && cor.status === 'Submitted'
 
   return (

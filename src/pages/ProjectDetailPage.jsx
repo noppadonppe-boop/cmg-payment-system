@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext'
 import Button from '../components/ui/Button'
 import Card, { CardHeader } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
+import { AttachmentLink } from '../components/ui/AttachmentField'
 import { clsx } from 'clsx'
 
 const TABS = [
@@ -178,10 +179,7 @@ function DetailContract({ project }) {
       />
       <InfoRow
         label="Attachment"
-        value={project.contractAttachment
-          ? <a href="#" className="flex items-center gap-1 text-blue-600 hover:underline text-sm"><Paperclip size={12} />{project.contractAttachment}</a>
-          : null
-        }
+        value={project.contractAttachment ? <AttachmentLink value={project.contractAttachment} className="flex items-center gap-1" /> : null}
       />
       {project.contractNote && <InfoRow label="Note" value={project.contractNote} wide />}
     </div>
@@ -213,7 +211,7 @@ function DetailBankBond({ project }) {
               <InfoRow label="Bank" value={bond.bankName} />
               <InfoRow label="Start Date" value={fmtDate(bond.startDate)} />
               <InfoRow label="End Date" value={fmtDate(bond.endDate)} />
-              <InfoRow label="Attachment" value={bond.attachment ? <a href="#" className="text-blue-600 hover:underline flex items-center gap-1 text-sm"><Paperclip size={12} />{bond.attachment}</a> : null} />
+              <InfoRow label="Attachment" value={bond.attachment ? <AttachmentLink value={bond.attachment} className="flex items-center gap-1" /> : null} />
               {bond.note && <InfoRow label="Note" value={bond.note} wide />}
             </div>
           </div>

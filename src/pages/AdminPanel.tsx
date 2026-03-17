@@ -8,8 +8,9 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
+import { useData } from '../context/DataContext'
 import { USER_ROLES, type UserProfile, type UserRole } from '../types/auth'
-import { Check, X, Trash2, Shield, Users, Clock, UserCheck, UserX } from 'lucide-react'
+import { Check, X, Trash2, Shield, Users, Clock, UserCheck, UserX, FolderOpen } from 'lucide-react'
 import { clsx } from 'clsx'
 
 const ROOT = 'CMG-payment-system/root'
@@ -21,6 +22,7 @@ const ROLE_COLORS: Record<string, string> = {
   GM:         'bg-sky-100 text-sky-700 border-sky-200',
   CD:         'bg-cyan-100 text-cyan-700 border-cyan-200',
   PM:         'bg-emerald-100 text-emerald-700 border-emerald-200',
+  CM:         'bg-teal-100 text-teal-700 border-teal-200',
   QsEng:      'bg-amber-100 text-amber-700 border-amber-200',
   AccCMG:     'bg-rose-100 text-rose-700 border-rose-200',
 }
@@ -35,10 +37,12 @@ type Tab = 'pending' | 'approved' | 'rejected' | 'all'
 
 export default function AdminPanel() {
   const { userProfile: me } = useAuth()
-  const [users,      setUsers]      = useState<UserProfile[]>([])
-  const [tab,        setTab]        = useState<Tab>('pending')
-  const [busyUid,    setBusyUid]    = useState<string | null>(null)
-  const [editRoles,  setEditRoles]  = useState<Record<string, UserRole[]>>({})
+  const { projects } = useData()
+  const [users,        setUsers]        = useState<UserProfile[]>([])
+  const [tab,          setTab]          = useState<Tab>('pending')
+  const [busyUid,      setBusyUid]      = useState<string | null>(null)
+  const [editRoles,    setEditRoles]    = useState<Record<string, UserRole[]>>({})
+  const [editProjects, setEditProjects] = useState<Record<string, string[]>>({})
 
   useEffect(() => {
     const unsub = onSnapshot(
@@ -74,6 +78,26 @@ export default function AdminPanel() {
     try {
       await updateDoc(doc(db, `${ROOT}/users/${uid}`), { role: roles })
       setEditRoles((p) => {
+        const n = { ...p }; delete n[uid]; return n
+      })
+    } finally { setBusyUid(null) }
+  }
+
+  function toggleProject(uid: string, projectId: string) {
+    setEditProjects((prev) => {
+      const current = prev[uid] ?? users.find((u) => u.uid === uid)?.assignedProjects ?? []
+      const next = current.includes(projectId)
+        ? current.filter((id) => id !== projectId)
+        : [...current, projectId]
+      return { ...prev, [uid]: next }
+    })
+  }
+
+  async function updateAssignedProjects(uid: string, projectIds: string[]) {
+    setBusyUid(uid)
+    try {
+      await updateDoc(doc(db, `${ROOT}/users/${uid}`), { assignedProjects: projectIds })
+      setEditProjects((p) => {
         const n = { ...p }; delete n[uid]; return n
       })
     } finally { setBusyUid(null) }
@@ -172,8 +196,10 @@ export default function AdminPanel() {
             const isMe     = user.uid === me?.uid
             const cfg      = STATUS_CONFIG[user.status]
             const StatusIcon = cfg.icon
-            const roles    = editRoles[user.uid] ?? user.role
-            const changed  = JSON.stringify(roles.sort()) !== JSON.stringify((user.role ?? []).slice().sort())
+            const roles     = editRoles[user.uid] ?? user.role
+            const rolesChanged = JSON.stringify([...roles].sort()) !== JSON.stringify((user.role ?? []).slice().sort())
+            const selectedProjects = editProjects[user.uid] ?? user.assignedProjects ?? []
+            const projectsChanged = JSON.stringify([...selectedProjects].sort()) !== JSON.stringify((user.assignedProjects ?? []).slice().sort())
 
             return (
               <div
@@ -228,7 +254,7 @@ export default function AdminPanel() {
                       )
                     })}
                   </div>
-                  {changed && (
+                  {rolesChanged && (
                     <button
                       onClick={() => updateRoles(user.uid, roles)}
                       disabled={isBusy}
@@ -238,6 +264,55 @@ export default function AdminPanel() {
                     </button>
                   )}
                 </div>
+
+                {/* Projects (ซึ่ง user มองเห็นได้) */}
+                {user.status === 'approved' && (
+                  <div>
+                    <p className="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1.5">
+                      <FolderOpen size={12} />
+                      โครงการ (กำหนดว่า user นี้มองเห็นโครงการใดบ้าง)
+                    </p>
+                    {projects.length === 0 ? (
+                      <p className="text-xs text-slate-400">ยังไม่มีโครงการในระบบ</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {projects.map((proj) => {
+                          const checked = selectedProjects.includes(proj.id)
+                          return (
+                            <label
+                              key={proj.id}
+                              className={clsx(
+                                'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition',
+                                checked
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300',
+                                isMe && 'cursor-not-allowed opacity-70',
+                              )}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => !isMe && toggleProject(user.uid, proj.id)}
+                                disabled={isMe || isBusy}
+                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="truncate max-w-[180px]">{proj.name}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {projectsChanged && projects.length > 0 && (
+                      <button
+                        onClick={() => updateAssignedProjects(user.uid, selectedProjects)}
+                        disabled={isBusy}
+                        className="mt-2 text-xs text-blue-600 hover:underline font-medium"
+                      >
+                        บันทึกการกำหนดโครงการ
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {/* Actions */}
                 {!isMe && (

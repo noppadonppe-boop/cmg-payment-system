@@ -4,10 +4,11 @@ import {
   useState,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from 'react'
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth'
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore'
+import { doc, collection, onSnapshot } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import { isSessionExpired, clearSession, getRemainingMinutes } from '../lib/session'
 import { logout as firebaseLogout } from '../lib/authService'
@@ -21,6 +22,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
   GM:         { canManageProjects: true,  canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: false, globalView: true  },
   CD:         { canManageProjects: true,  canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: false, globalView: true  },
   PM:         { canManageProjects: true,  canApprovePayments: true,  canConvertCOR: true,  canUpdateBonds: false, canCreateClaims: false, globalView: false },
+  CM:         { canManageProjects: false, canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: false, globalView: false },
   QsEng:      { canManageProjects: false, canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: true,  globalView: false },
   AccCMG:     { canManageProjects: false, canApprovePayments: false, canConvertCOR: false, canUpdateBonds: true,  canCreateClaims: false, globalView: true  },
 }
@@ -85,34 +87,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading]           = useState(true)
   const [sessionMinutesLeft, setSessionMinutesLeft] = useState(0)
   const [allUsers, setAllUsers]         = useState<LegacyUser[]>([])
-
-  // ── fetch profile from Firestore ────────────────────────────────────────
-  const fetchAndSetProfile = useCallback(async (uid: string) => {
-    try {
-      const snap = await getDoc(doc(db, `${ROOT}/users/${uid}`))
-      if (snap.exists()) {
-        setUserProfile(snap.data() as UserProfile)
-      } else {
-        setUserProfile(null)
-      }
-    } catch {
-      setUserProfile(null)
-    }
-  }, [])
+  const unsubProfileRef = useRef<(() => void) | null>(null)
 
   // Use auth.currentUser directly — avoids stale closure when called right after sign-in
-  const refreshProfile = useCallback(async () => {
-    const uid = auth.currentUser?.uid
-    if (uid) await fetchAndSetProfile(uid)
-  }, [fetchAndSetProfile])
+  const refreshProfile = useCallback(() => {
+    // No-op: profile now updates in real-time via onSnapshot
+    return Promise.resolve()
+  }, [])
 
   // ── listen to Firebase auth state ───────────────────────────────────────
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+    const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
+      unsubProfileRef.current?.()
+      unsubProfileRef.current = null
+
       setFirebaseUser(fbUser)
 
       if (!fbUser) {
         setUserProfile(null)
+        setAllUsers([])
         setLoading(false)
         return
       }
@@ -120,17 +113,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Session expired → sign out silently
       if (isSessionExpired()) {
         clearSession()
-        await firebaseLogout()
+        firebaseLogout().catch(() => {})
         setUserProfile(null)
+        setAllUsers([])
         setLoading(false)
         return
       }
 
-      await fetchAndSetProfile(fbUser.uid)
-      setLoading(false)
+      // Real-time: subscribe to current user's profile (updates when admin changes role/status)
+      const userRef = doc(db, `${ROOT}/users/${fbUser.uid}`)
+      unsubProfileRef.current = onSnapshot(
+        userRef,
+        (snap) => {
+          if (snap.exists()) {
+            setUserProfile(snap.data() as UserProfile)
+          } else {
+            setUserProfile(null)
+          }
+          setLoading(false)
+        },
+        () => {
+          setUserProfile(null)
+          setLoading(false)
+        }
+      )
     })
-    return unsub
-  }, [fetchAndSetProfile])
+
+    return () => {
+      unsubProfileRef.current?.()
+      unsubAuth()
+    }
+  }, [])
 
   // ── session countdown ticker (every 60 s) ───────────────────────────────
   useEffect(() => {
@@ -146,26 +159,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(id)
   }, [firebaseUser])
 
-  // ── load all approved users for USERS legacy compat ─────────────────────
+  // ── Real-time: subscribe to all users (USERS list updates when admin approves/changes roles)
   useEffect(() => {
-    if (!firebaseUser || !userProfile) return
-    getDocs(collection(db, `${ROOT}/users`))
-      .then((snap) => {
-        const mapped: LegacyUser[] = snap.docs
-          .map((d) => {
-            const p = d.data() as UserProfile
-            return {
-              id: p.uid,
-              name: `${p.firstName} ${p.lastName}`,
-              role: p.role[0] ?? 'QsEng',
-              avatar: `${p.firstName.charAt(0)}${p.lastName.charAt(0)}`.toUpperCase(),
-              assignedProjects: p.assignedProjects,
-            } satisfies LegacyUser
-          })
+    if (!firebaseUser) return
+    const usersCol = collection(db, `${ROOT}/users`)
+    const unsub = onSnapshot(
+      usersCol,
+      (snap) => {
+        const mapped: LegacyUser[] = snap.docs.map((d) => {
+          const p = d.data() as UserProfile
+          return {
+            id: p.uid,
+            name: `${p.firstName} ${p.lastName}`,
+            role: p.role[0] ?? 'QsEng',
+            roles: p.role,
+            avatar: `${p.firstName.charAt(0)}${p.lastName.charAt(0)}`.toUpperCase(),
+            assignedProjects: p.assignedProjects,
+          } satisfies LegacyUser
+        })
         setAllUsers(mapped)
-      })
-      .catch(() => {})
-  }, [firebaseUser, userProfile])
+      },
+      () => setAllUsers([])
+    )
+    return () => unsub()
+  }, [firebaseUser])
 
   // ── derived legacy values ────────────────────────────────────────────────
   const permissions = userProfile
@@ -227,6 +244,7 @@ export const ROLES = {
   GM: 'GM',
   CD: 'CD',
   PM: 'PM',
+  CM: 'CM',
   QsEng: 'QsEng',
   AccCMG: 'AccCMG',
 } as const

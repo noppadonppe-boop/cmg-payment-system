@@ -3,6 +3,7 @@ import { CheckCircle2, XCircle, FileText, Calculator, User, Calendar, Paperclip 
 import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { FormField, Textarea } from '../ui/FormField'
+import { AttachmentLink } from '../ui/AttachmentField'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
 import { Modal } from './PaymentCreateModal'
@@ -76,9 +77,7 @@ export default function ApproveModal({ payment, onClose }) {
                 <Calendar size={11} /> Submitted {payment.createdAt}
               </span>
               {payment.attachment && (
-                <a href="#" className="flex items-center gap-1 text-blue-600 hover:underline">
-                  <Paperclip size={11} /> {payment.attachment}
-                </a>
+                <AttachmentLink value={payment.attachment} className="flex items-center gap-1" />
               )}
             </div>
 
