@@ -105,16 +105,9 @@ export default function LoginPage() {
     awaitingPhoneRef.current = true
     try {
       const profile = await loginWithGoogle()
-      // Only approved/pending accounts go through phone 2FA
-      if (profile.status === 'approved' || profile.status === 'pending') {
-        setPendingProfile(profile)
-        setBusy(false)
-        // awaitingPhoneRef stays true until handlePhoneVerified clears it
-      } else {
-        awaitingPhoneRef.current = false
-        refreshProfile().catch(() => {})
-        redirectByStatus(profile.status)
-      }
+      awaitingPhoneRef.current = false
+      refreshProfile().catch(() => {})
+      redirectByStatus(profile.status)
     } catch (err: unknown) {
       awaitingPhoneRef.current = false
       const code = (err as { code?: string })?.code ?? (err as Error).message
