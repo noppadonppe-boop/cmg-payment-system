@@ -10,7 +10,7 @@ import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import { USER_ROLES, type UserProfile, type UserRole } from '../types/auth'
-import { Check, X, Trash2, Shield, Users, Clock, UserCheck, UserX, FolderOpen } from 'lucide-react'
+import { Check, X, Trash2, Shield, Users, Clock, UserCheck, UserX, FolderOpen, Pencil, Save } from 'lucide-react'
 import { clsx } from 'clsx'
 
 const ROOT = 'CMG-payment-system/root'
@@ -38,11 +38,14 @@ type Tab = 'pending' | 'approved' | 'rejected' | 'all'
 export default function AdminPanel() {
   const { userProfile: me } = useAuth()
   const { projects } = useData()
-  const [users,        setUsers]        = useState<UserProfile[]>([])
-  const [tab,          setTab]          = useState<Tab>('pending')
-  const [busyUid,      setBusyUid]      = useState<string | null>(null)
-  const [editRoles,    setEditRoles]    = useState<Record<string, UserRole[]>>({})
-  const [editProjects, setEditProjects] = useState<Record<string, string[]>>({})
+  const [users,       setUsers]       = useState<UserProfile[]>([])
+  const [tab,         setTab]         = useState<Tab>('pending')
+  const [busyUid,     setBusyUid]     = useState<string | null>(null)
+
+  // ── Edit mode state (one user at a time) ──────────────────────────────────
+  const [editingUid,     setEditingUid]     = useState<string | null>(null)
+  const [editRoles,      setEditRoles]      = useState<UserRole[]>([])
+  const [editProjects,   setEditProjects]   = useState<string[]>([])
 
   useEffect(() => {
     const unsub = onSnapshot(
@@ -57,11 +60,56 @@ export default function AdminPanel() {
     ? users
     : users.filter((u) => u.status === tab)
 
+  // ── Edit helpers ──────────────────────────────────────────────────────────
+  function startEdit(user: UserProfile) {
+    setEditingUid(user.uid)
+    setEditRoles([...user.role])
+    setEditProjects([...(user.assignedProjects ?? [])])
+  }
+
+  function cancelEdit() {
+    setEditingUid(null)
+    setEditRoles([])
+    setEditProjects([])
+  }
+
+  async function saveEdit(uid: string) {
+    if (editRoles.length === 0) return
+    setBusyUid(uid)
+    try {
+      await updateDoc(doc(db, `${ROOT}/users/${uid}`), {
+        role: editRoles,
+        assignedProjects: editProjects,
+      })
+      setEditingUid(null)
+      setEditRoles([])
+      setEditProjects([])
+    } finally {
+      setBusyUid(null)
+    }
+  }
+
+  function toggleRole(role: UserRole) {
+    setEditRoles((prev) =>
+      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
+    )
+  }
+
+  function toggleProject(projectId: string) {
+    setEditProjects((prev) =>
+      prev.includes(projectId) ? prev.filter((id) => id !== projectId) : [...prev, projectId]
+    )
+  }
+
+  // ── Approve / Reject / Delete ─────────────────────────────────────────────
   async function approve(uid: string) {
     setBusyUid(uid)
     try {
-      const roles = editRoles[uid] ?? users.find((u) => u.uid === uid)?.role ?? ['QsEng']
-      await updateDoc(doc(db, `${ROOT}/users/${uid}`), { status: 'approved', role: roles })
+      const user = users.find((u) => u.uid === uid)
+      await updateDoc(doc(db, `${ROOT}/users/${uid}`), {
+        status: 'approved',
+        role: user?.role ?? ['QsEng'],
+      })
     } finally { setBusyUid(null) }
   }
 
@@ -72,53 +120,12 @@ export default function AdminPanel() {
     } finally { setBusyUid(null) }
   }
 
-  async function updateRoles(uid: string, roles: UserRole[]) {
-    if (roles.length === 0) return
-    setBusyUid(uid)
-    try {
-      await updateDoc(doc(db, `${ROOT}/users/${uid}`), { role: roles })
-      setEditRoles((p) => {
-        const n = { ...p }; delete n[uid]; return n
-      })
-    } finally { setBusyUid(null) }
-  }
-
-  function toggleProject(uid: string, projectId: string) {
-    setEditProjects((prev) => {
-      const current = prev[uid] ?? users.find((u) => u.uid === uid)?.assignedProjects ?? []
-      const next = current.includes(projectId)
-        ? current.filter((id) => id !== projectId)
-        : [...current, projectId]
-      return { ...prev, [uid]: next }
-    })
-  }
-
-  async function updateAssignedProjects(uid: string, projectIds: string[]) {
-    setBusyUid(uid)
-    try {
-      await updateDoc(doc(db, `${ROOT}/users/${uid}`), { assignedProjects: projectIds })
-      setEditProjects((p) => {
-        const n = { ...p }; delete n[uid]; return n
-      })
-    } finally { setBusyUid(null) }
-  }
-
   async function deleteUser(uid: string) {
     if (!confirm('ยืนยันการลบผู้ใช้งานนี้?')) return
     setBusyUid(uid)
     try {
       await deleteDoc(doc(db, `${ROOT}/users/${uid}`))
     } finally { setBusyUid(null) }
-  }
-
-  function toggleRoleEdit(uid: string, role: UserRole) {
-    setEditRoles((prev) => {
-      const current = prev[uid] ?? users.find((u) => u.uid === uid)?.role ?? ['QsEng']
-      const next = current.includes(role)
-        ? current.filter((r) => r !== role)
-        : [...current, role]
-      return { ...prev, [uid]: next }
-    })
   }
 
   const counts = {
@@ -192,24 +199,27 @@ export default function AdminPanel() {
       ) : (
         <div className="space-y-3">
           {filtered.map((user) => {
-            const isBusy   = busyUid === user.uid
-            const isMe     = user.uid === me?.uid
-            const cfg      = STATUS_CONFIG[user.status]
+            const isBusy     = busyUid === user.uid
+            const isMe       = user.uid === me?.uid
+            const isEditing  = editingUid === user.uid
+            const cfg        = STATUS_CONFIG[user.status]
             const StatusIcon = cfg.icon
-            const roles     = editRoles[user.uid] ?? user.role
-            const rolesChanged = JSON.stringify([...roles].sort()) !== JSON.stringify((user.role ?? []).slice().sort())
-            const selectedProjects = editProjects[user.uid] ?? user.assignedProjects ?? []
-            const projectsChanged = JSON.stringify([...selectedProjects].sort()) !== JSON.stringify((user.assignedProjects ?? []).slice().sort())
+
+            // Display values: use edit draft when in edit mode, otherwise Firestore data
+            const displayRoles    = isEditing ? editRoles    : user.role
+            const displayProjects = isEditing ? editProjects : (user.assignedProjects ?? [])
 
             return (
               <div
                 key={user.uid}
-                className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4"
+                className={clsx(
+                  'bg-white rounded-xl border shadow-sm p-5 space-y-4 transition-all',
+                  isEditing ? 'border-blue-300 ring-2 ring-blue-100' : 'border-slate-200',
+                )}
               >
                 {/* Top row */}
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    {/* Avatar */}
                     <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 font-bold text-sm flex items-center justify-center shrink-0">
                       {user.firstName.charAt(0)}{user.lastName.charAt(0)}
                     </div>
@@ -223,11 +233,48 @@ export default function AdminPanel() {
                     </div>
                   </div>
 
-                  {/* Status badge */}
-                  <span className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border shrink-0', cfg.color)}>
-                    <StatusIcon size={11} />
-                    {cfg.label}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Status badge */}
+                    <span className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border', cfg.color)}>
+                      <StatusIcon size={11} />
+                      {cfg.label}
+                    </span>
+
+                    {/* Edit / Save / Cancel buttons */}
+                    {!isMe && user.status === 'approved' && (
+                      isEditing ? (
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => saveEdit(user.uid)}
+                            disabled={isBusy || editRoles.length === 0}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition"
+                          >
+                            {isBusy
+                              ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              : <Save size={12} />}
+                            บันทึก
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            disabled={isBusy}
+                            className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 disabled:opacity-50 text-slate-600 text-xs font-semibold rounded-lg transition"
+                          >
+                            <X size={12} />
+                            ยกเลิก
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => startEdit(user)}
+                          disabled={isBusy || editingUid !== null}
+                          className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 disabled:opacity-40 text-slate-600 text-xs font-semibold rounded-lg transition"
+                        >
+                          <Pencil size={12} />
+                          แก้ไข
+                        </button>
+                      )
+                    )}
+                  </div>
                 </div>
 
                 {/* Roles */}
@@ -235,18 +282,20 @@ export default function AdminPanel() {
                   <p className="text-xs font-medium text-slate-500 mb-2">สิทธิ์การใช้งาน</p>
                   <div className="flex flex-wrap gap-1.5">
                     {USER_ROLES.map((r) => {
-                      const active = roles.includes(r)
+                      const active = displayRoles.includes(r)
                       return (
                         <button
                           key={r}
-                          onClick={() => !isMe && toggleRoleEdit(user.uid, r)}
-                          disabled={isMe || isBusy}
+                          onClick={() => isEditing && !isMe && toggleRole(r)}
+                          disabled={!isEditing || isMe || isBusy}
                           className={clsx(
                             'px-2.5 py-1 rounded-lg text-xs font-semibold border transition',
                             active
                               ? ROLE_COLORS[r]
-                              : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300',
-                            isMe && 'cursor-not-allowed opacity-70',
+                              : 'bg-white text-slate-400 border-slate-200',
+                            isEditing && !isMe
+                              ? 'hover:border-slate-400 cursor-pointer'
+                              : 'cursor-default',
                           )}
                         >
                           {r}
@@ -254,18 +303,12 @@ export default function AdminPanel() {
                       )
                     })}
                   </div>
-                  {rolesChanged && (
-                    <button
-                      onClick={() => updateRoles(user.uid, roles)}
-                      disabled={isBusy}
-                      className="mt-2 text-xs text-blue-600 hover:underline font-medium"
-                    >
-                      บันทึกการเปลี่ยนแปลงสิทธิ์
-                    </button>
+                  {isEditing && editRoles.length === 0 && (
+                    <p className="mt-1.5 text-xs text-rose-500">กรุณาเลือกสิทธิ์อย่างน้อย 1 รายการ</p>
                   )}
                 </div>
 
-                {/* Projects (ซึ่ง user มองเห็นได้) */}
+                {/* Projects */}
                 {user.status === 'approved' && (
                   <div>
                     <p className="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1.5">
@@ -277,23 +320,25 @@ export default function AdminPanel() {
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         {projects.map((proj) => {
-                          const checked = selectedProjects.includes(proj.id)
+                          const checked = displayProjects.includes(proj.id)
                           return (
                             <label
                               key={proj.id}
                               className={clsx(
-                                'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition',
+                                'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition',
                                 checked
                                   ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                  : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300',
-                                isMe && 'cursor-not-allowed opacity-70',
+                                  : 'bg-white text-slate-500 border-slate-200',
+                                isEditing && !isMe
+                                  ? 'cursor-pointer hover:border-slate-300'
+                                  : 'cursor-default',
                               )}
                             >
                               <input
                                 type="checkbox"
                                 checked={checked}
-                                onChange={() => !isMe && toggleProject(user.uid, proj.id)}
-                                disabled={isMe || isBusy}
+                                onChange={() => isEditing && !isMe && toggleProject(proj.id)}
+                                disabled={!isEditing || isMe || isBusy}
                                 className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                               />
                               <span className="truncate max-w-[180px]">{proj.name}</span>
@@ -302,19 +347,10 @@ export default function AdminPanel() {
                         })}
                       </div>
                     )}
-                    {projectsChanged && projects.length > 0 && (
-                      <button
-                        onClick={() => updateAssignedProjects(user.uid, selectedProjects)}
-                        disabled={isBusy}
-                        className="mt-2 text-xs text-blue-600 hover:underline font-medium"
-                      >
-                        บันทึกการกำหนดโครงการ
-                      </button>
-                    )}
                   </div>
                 )}
 
-                {/* Actions */}
+                {/* Actions (Approve / Reject / Delete) */}
                 {!isMe && (
                   <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-100">
                     {user.status !== 'approved' && (
