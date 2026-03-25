@@ -21,6 +21,7 @@ import BondStatusPage   from './pages/BondStatusPage'
 import PaymentsPage     from './pages/PaymentsPage'
 import ChangeOrdersPage from './pages/ChangeOrdersPage'
 import ReportsPage      from './pages/ReportsPage'
+import UserManualPage  from './pages/UserManualPage'
 
 /* ─── Loading spinner ─────────────────────────────────────────────────── */
 function LoadingScreen({ message = 'กำลังโหลด…' }) {
@@ -63,6 +64,7 @@ function AppContent() {
         <Route path="/payments"       element={<PaymentsPage />} />
         <Route path="/change-orders"  element={<ChangeOrdersPage />} />
         <Route path="/reports"        element={<ReportsPage />} />
+        <Route path="/manual"         element={<UserManualPage />} />
         <Route path="/placeholder"    element={<PlaceholderPage />} />
         <Route
           path="/admin"

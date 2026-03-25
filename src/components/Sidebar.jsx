@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, FolderOpen, Shield, CreditCard,
   GitPullRequest, BarChart3, ChevronLeft, ChevronRight,
-  Building2, Users
+  Building2, Users, BookOpen
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { clsx } from 'clsx'
@@ -49,6 +49,12 @@ const NAV_ITEMS = [
     icon: Users,
     path: '/admin',
     roles: ['SuperAdmin', 'Admin'],
+  },
+  {
+    label: 'User Manual',
+    icon: BookOpen,
+    path: '/manual',
+    roles: ['SuperAdmin', 'Admin', 'MD', 'GM', 'CD', 'PM', 'CM', 'QsEng', 'AccCMG'],
   },
 ]
 
