@@ -61,7 +61,7 @@ export default function ProjectFormPage() {
   const isEditing = !!id
   const navigate = useNavigate()
   const { getProject, addProject, updateProject } = useData()
-  const { can, USERS, currentUser } = useAuth()
+  const { can, USERS, currentUser, hasProjectAccess } = useAuth()
 
   const [activeTab, setActiveTab] = useState('general')
   const [form, setForm] = useState(EMPTY_FORM)
@@ -93,6 +93,16 @@ export default function ProjectFormPage() {
       }
     }
   }, [id, isEditing, getProject, USERS])
+
+  // Guard: editing a project the user cannot access
+  if (isEditing && getProject(id) && !hasProjectAccess(id)) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <p className="text-slate-700 font-semibold">ไม่มีสิทธิ์เข้าถึงโครงการนี้</p>
+        <button onClick={() => navigate('/projects')} className="text-sm text-blue-600 hover:underline">กลับ</button>
+      </div>
+    )
+  }
 
   if (!can('canManageProjects')) {
     return (

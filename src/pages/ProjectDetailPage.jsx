@@ -54,7 +54,7 @@ export default function ProjectDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { getProject } = useData()
-  const { can, USERS } = useAuth()
+  const { can, USERS, hasProjectAccess } = useAuth()
   const [activeTab, setActiveTab] = useState('general')
 
   const project = getProject(id)
@@ -65,6 +65,17 @@ export default function ProjectDetailPage() {
         <XCircle size={40} className="text-slate-300" />
         <p className="text-slate-600 font-semibold">Project not found</p>
         <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate('/projects')}>Back</Button>
+      </Card>
+    )
+  }
+
+  if (!hasProjectAccess(id)) {
+    return (
+      <Card className="flex flex-col items-center justify-center py-20 gap-3">
+        <XCircle size={40} className="text-rose-300" />
+        <p className="text-slate-700 font-semibold">ไม่มีสิทธิ์เข้าถึงโครงการนี้</p>
+        <p className="text-slate-400 text-sm">คุณไม่ได้รับมอบหมายให้ดูแลโครงการนี้</p>
+        <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate('/projects')}>กลับ</Button>
       </Card>
     )
   }
