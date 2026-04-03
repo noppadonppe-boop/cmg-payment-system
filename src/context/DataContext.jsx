@@ -4,7 +4,6 @@ import {
   deleteDoc, writeBatch,
 } from 'firebase/firestore'
 import { db } from '../firebase'
-import { seedFirestore } from '../seedFirestore'
 
 const ROOT = 'CMG-payment-system/root'
 const col = (name) => collection(db, `${ROOT}/${name}`)
@@ -285,7 +284,6 @@ export function DataProvider({ children }) {
   const [cors,         setCors]         = useState([])
   const [coas,         setCoas]         = useState([])
   const [loading,      setLoading]      = useState(true)
-  const [seeded,       setSeeded]       = useState(false)
 
   // ── Real-time listeners ──────────────────────────────────────────────────
   useEffect(() => {
@@ -309,14 +307,6 @@ export function DataProvider({ children }) {
       unsubProjects(); unsubBonds(); unsubPayments(); unsubCORs(); unsubCOAs()
     }
   }, [])
-
-  // ── Auto-seed on first load if Firestore is empty ────────────────────────
-  useEffect(() => {
-    if (!loading && !seeded && projects.length === 0) {
-      setSeeded(true)
-      seedFirestore()
-    }
-  }, [loading, projects.length, seeded])
 
   // ── Projects ─────────────────────────────────────────────────────────────
   const addProject = async (project) => {
