@@ -78,7 +78,7 @@ export default function InvoiceModal({ payment, onClose }) {
             <div>
               <span className="text-slate-400">Deductions</span>
               <p className="font-medium text-rose-600">
-                −{fmtCurrency((payment.advanceDeduction || 0) + (payment.retentionReduce || 0))}
+                −{fmtCurrency((payment.advanceDeduction || 0) + (payment.retentionReduce || 0) + (payment.withTaxValue || 0))}
               </p>
             </div>
             <div>

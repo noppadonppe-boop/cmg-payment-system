@@ -292,7 +292,7 @@ function PaymentRow({ pay, project, creator, sc, actions, canDelete, onView, onD
                 <div>
                   <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">Deductions</p>
                   <p className="text-sm font-medium text-rose-500">
-                    -{fmtCurrency((pay.advanceDeduction || 0) + (pay.retentionReduce || 0))}
+                    -{fmtCurrency((pay.advanceDeduction || 0) + (pay.retentionReduce || 0) + (pay.withTaxValue || 0))}
                   </p>
                 </div>
                 <div>

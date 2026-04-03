@@ -109,7 +109,11 @@ export default function ApproveModal({ payment, onClose }) {
                 <span className="text-slate-500">Retention Reduce</span>
                 <span className="font-medium text-rose-500">− {fmtCurrency(payment.retentionReduce)}</span>
               </div>
-              <div className="flex justify-between items-center py-2 bg-emerald-50 px-3 rounded-lg mt-1">
+                <div className="flex justify-between items-center py-1.5 border-b border-slate-50">
+                  <span className="text-slate-500">With Tax ({payment.withTaxPercent || 0}%)</span>
+                  <span className="font-medium text-rose-500">- {fmtCurrency(payment.withTaxValue || 0)}</span>
+                </div>
+                <div className="flex justify-between items-center py-2 bg-emerald-50 px-3 rounded-lg mt-1">
                 <span className="font-semibold text-slate-700">Balance Payable</span>
                 <span className="text-lg font-bold text-emerald-700">{fmtCurrency(payment.balanceValue)}</span>
               </div>

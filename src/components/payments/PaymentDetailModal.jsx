@@ -79,16 +79,18 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
 
           {/* Financial breakdown */}
           <div className="mt-4 rounded-lg border border-slate-200 overflow-hidden">
-            <div className="grid grid-cols-4 text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50 px-4 py-2 border-b border-slate-200">
+            <div className="grid grid-cols-5 text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50 px-4 py-2 border-b border-slate-200">
               <span>Claim Value</span>
               <span>Advance Ded.</span>
               <span>Retention</span>
+              <span>With Tax</span>
               <span className="text-emerald-700">Balance</span>
             </div>
-            <div className="grid grid-cols-4 px-4 py-3">
+            <div className="grid grid-cols-5 px-4 py-3">
               <span className="text-sm font-semibold text-slate-800">{fmtCurrency(payment.value)}</span>
               <span className="text-sm font-medium text-rose-500">−{fmtCurrency(payment.advanceDeduction)}</span>
               <span className="text-sm font-medium text-rose-500">−{fmtCurrency(payment.retentionReduce)}</span>
+              <span className="text-sm font-medium text-rose-500">-{fmtCurrency(payment.withTaxValue || 0)}</span>
               <span className="text-base font-bold text-emerald-700">{fmtCurrency(payment.balanceValue)}</span>
             </div>
           </div>
