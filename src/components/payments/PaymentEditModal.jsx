@@ -5,6 +5,7 @@ import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { FormField, Input, Textarea, Select } from '../ui/FormField'
 import { AttachmentField } from '../ui/AttachmentField'
+import { calculatePaymentBalance } from '../../lib/paymentCalculations'
 import Button from '../ui/Button'
 import { Modal } from './PaymentCreateModal'
 import { clsx } from 'clsx'
@@ -13,10 +14,28 @@ function parseCurrency(val) {
   return parseFloat(String(val || '').replace(/,/g, '')) || 0
 }
 
+function sanitizeCurrencyInput(val) {
+  const cleaned = String(val ?? '').replace(/,/g, '').replace(/[^\d.]/g, '')
+  if (!cleaned) return ''
+
+  const [whole = '', ...decimalParts] = cleaned.split('.')
+  const decimal = decimalParts.join('').slice(0, 2)
+  const normalizedWhole = whole.replace(/^0+(?=\d)/, '') || '0'
+
+  if (cleaned.startsWith('.')) return `0.${decimal}`
+  if (cleaned.includes('.')) return `${normalizedWhole}.${decimal}`
+  return normalizedWhole
+}
+
 function fmtInput(val) {
-  const n = parseCurrency(val)
-  if (!n && n !== 0) return ''
-  return n.toLocaleString('en-US')
+  const raw = sanitizeCurrencyInput(val)
+  if (!raw) return ''
+
+  const hasDecimal = raw.includes('.')
+  const [whole, decimal = ''] = raw.split('.')
+  const formattedWhole = Number(whole || 0).toLocaleString('en-US')
+
+  return hasDecimal ? `${formattedWhole}.${decimal}` : formattedWhole
 }
 
 export default function PaymentEditModal({ payment, projects, onClose, onSaved }) {
@@ -30,6 +49,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
     value: '',
     advanceDeduction: '',
     retentionReduce: '',
+    withTaxPercent: '',
     attachment: '',
     note: '',
   })
@@ -45,6 +65,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
       value: payment.value != null ? String(payment.value) : '',
       advanceDeduction: payment.advanceDeduction != null ? String(payment.advanceDeduction) : '',
       retentionReduce: payment.retentionReduce != null ? String(payment.retentionReduce) : '',
+      withTaxPercent: payment.withTaxPercent != null ? String(payment.withTaxPercent) : '',
       attachment: payment.attachment ?? '',
       note: payment.note ?? '',
     })
@@ -58,7 +79,8 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
   const value = parseCurrency(form.value)
   const adv   = parseCurrency(form.advanceDeduction)
   const ret   = parseCurrency(form.retentionReduce)
-  const balance = value - adv - ret
+  const withTaxPercent = parseCurrency(form.withTaxPercent)
+  const { grossClaim, withTaxAmount, balanceValue: balance } = calculatePaymentBalance(value, adv, ret, withTaxPercent)
 
   const validate = () => {
     const errs = {}
@@ -81,6 +103,9 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
         value,
         advanceDeduction: adv,
         retentionReduce:  ret,
+        withTaxPercent,
+        withTaxValue:     withTaxAmount,
+        grossClaimValue:  grossClaim,
         balanceValue:     balance,
         attachment:       form.attachment,
         note:             form.note,
@@ -150,14 +175,15 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
             <span className="text-sm font-semibold text-white">Financial Calculation</span>
           </div>
           <div className="p-4 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <FormField label="Claim Value (฿)" required error={errors.value}>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">฿</span>
                   <Input
+                    inputMode="decimal"
                     placeholder="0"
                     value={fmtInput(form.value)}
-                    onChange={e => set('value', e.target.value.replace(/,/g, ''))}
+                    onChange={e => set('value', sanitizeCurrencyInput(e.target.value))}
                     error={errors.value}
                     className="pl-7"
                   />
@@ -167,9 +193,10 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">฿</span>
                   <Input
+                    inputMode="decimal"
                     placeholder="0"
                     value={fmtInput(form.advanceDeduction)}
-                    onChange={e => set('advanceDeduction', e.target.value.replace(/,/g, ''))}
+                    onChange={e => set('advanceDeduction', sanitizeCurrencyInput(e.target.value))}
                     className="pl-7"
                   />
                 </div>
@@ -178,11 +205,24 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">฿</span>
                   <Input
+                    inputMode="decimal"
                     placeholder="0"
                     value={fmtInput(form.retentionReduce)}
-                    onChange={e => set('retentionReduce', e.target.value.replace(/,/g, ''))}
+                    onChange={e => set('retentionReduce', sanitizeCurrencyInput(e.target.value))}
                     className="pl-7"
                   />
+                </div>
+              </FormField>
+              <FormField label="With Tax (%)">
+                <div className="relative">
+                  <Input
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={fmtInput(form.withTaxPercent)}
+                    onChange={e => set('withTaxPercent', sanitizeCurrencyInput(e.target.value))}
+                    className="pr-7"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
                 </div>
               </FormField>
             </div>
@@ -190,9 +230,12 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
               'flex items-center justify-between px-4 py-3 rounded-lg border',
               balance >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'
             )}>
-              <span className="text-sm text-slate-600 font-medium">Balance Value</span>
+              <div className="text-sm text-slate-600">
+                <span className="font-medium">Balance Value</span>
+                <span className="text-slate-400 ml-2 text-xs">= Claim x 1.07 - Advance - Retention - With Tax</span>
+              </div>
               <span className={clsx('text-lg font-bold', balance >= 0 ? 'text-emerald-700' : 'text-rose-600')}>
-                ฿{balance.toLocaleString('en-US')}
+                ฿{balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
           </div>
