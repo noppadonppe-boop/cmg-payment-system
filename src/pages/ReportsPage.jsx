@@ -6,7 +6,7 @@ import {
 import {
   BarChart3, TrendingUp, GitPullRequest, Shield, CreditCard,
   CheckCircle2, Clock, Send, AlertCircle, ChevronDown,
-  ArrowUpRight, ArrowDownRight, Minus, FileText
+  ArrowUpRight, ArrowDownRight, Minus, FileText, Download
 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { useAuth } from '../context/AuthContext'
@@ -165,6 +165,7 @@ export default function ReportsPage() {
             <Report1
               projects={visibleProjects}
               payments={visiblePayments}
+              coas={visibleCOAs}
               selectedProject={selectedProject}
             />
           )}
@@ -196,57 +197,164 @@ export default function ReportsPage() {
 /* ═══════════════════════════════════════════════════════════════════════════
    REPORT 1 — Contract vs Payment
 ═══════════════════════════════════════════════════════════════════════════ */
-function Report1({ projects, payments, selectedProject }) {
+function Report1({ projects, payments, coas, selectedProject }) {
   const filteredProjects = selectedProject === 'all'
     ? projects
     : projects.filter(p => p.id === selectedProject)
 
   const rows = filteredProjects.map(proj => {
     const mainPays      = payments.filter(p => p.projectId === proj.id && p.type === 'main')
+    const coaPays       = payments.filter(p => p.projectId === proj.id && p.type === 'coa')
+    const projectCOAs   = coas.filter(c => c.projectId === proj.id)
     const receivedPays  = mainPays.filter(p => p.status === 'Received')
     const submittedPays = mainPays.filter(p => p.status === 'Submitted')
-    const pendingPays   = mainPays.filter(p => p.status === 'In Progress')
+    const coaReceivedPays  = coaPays.filter(p => p.status === 'Received')
+    const coaSubmittedPays = coaPays.filter(p => p.status === 'Submitted')
 
     const contractValue    = proj.contractValue || 0
+    const coaValue         = projectCOAs.reduce((s, c) => s + (c.value || 0), 0)
     const totalClaimed     = mainPays.reduce((s, p) => s + (p.value || 0), 0)
     const totalReceived    = receivedPays.reduce((s, p) => s + (p.balanceValue || 0), 0)
     const totalSubmitted   = submittedPays.reduce((s, p) => s + (p.balanceValue || 0), 0)
     const totalRetention   = mainPays.reduce((s, p) => s + (p.retentionReduce || 0), 0)
-    const totalAdvDed      = mainPays.reduce((s, p) => s + (p.advanceDeduction || 0), 0)
+    const coaReceived      = coaReceivedPays.reduce((s, p) => s + (p.balanceValue || 0), 0)
+    const coaSubmitted     = coaSubmittedPays.reduce((s, p) => s + (p.balanceValue || 0), 0)
+    const coaRetention     = coaPays.reduce((s, p) => s + (p.retentionReduce || 0), 0)
     const balance          = contractValue - totalReceived - totalSubmitted
-    const progressPct      = pct(totalReceived + totalSubmitted, contractValue)
+    const coaBalance       = coaValue - coaReceived - coaSubmitted
+    const totalIncome      = contractValue + coaValue
+    const combinedReceived = totalReceived + coaReceived
+    const combinedSubmitted = totalSubmitted + coaSubmitted
+    const combinedRetention = totalRetention + coaRetention
+    const combinedBalance  = balance + coaBalance
+    const progressPct      = pct(combinedReceived + combinedSubmitted, totalIncome)
 
     return {
-      proj, contractValue, totalClaimed, totalReceived,
-      totalSubmitted, totalRetention, totalAdvDed, balance,
-      progressPct, claimsCount: mainPays.length,
+      proj, contractValue, coaValue, totalIncome, totalClaimed,
+      totalReceived, totalSubmitted, totalRetention, balance,
+      coaReceived, coaSubmitted, coaRetention, coaBalance,
+      combinedReceived, combinedSubmitted, combinedRetention, combinedBalance,
+      progressPct, claimsCount: mainPays.length + coaPays.length,
     }
   })
 
   // Bar chart data
   const chartData = rows.map(r => ({
     name: r.proj.name.split(' ').slice(0, 2).join(' '),
-    'Contract Value':  r.contractValue,
-    'Received':        r.totalReceived,
-    'Submitted':       r.totalSubmitted,
-    'Balance':         Math.max(0, r.balance),
+    'Contract Value': r.contractValue,
+    'COA Value':      r.coaValue,
+    'Received':       r.combinedReceived,
+    'Submitted':      r.combinedSubmitted,
+    'Balance':        Math.max(0, r.combinedBalance),
   }))
 
-  // Summary totals
   const totals = rows.reduce((acc, r) => ({
     contractValue:  acc.contractValue  + r.contractValue,
-    totalReceived:  acc.totalReceived  + r.totalReceived,
-    totalSubmitted: acc.totalSubmitted + r.totalSubmitted,
-    totalRetention: acc.totalRetention + r.totalRetention,
-    balance:        acc.balance        + r.balance,
-  }), { contractValue: 0, totalReceived: 0, totalSubmitted: 0, totalRetention: 0, balance: 0 })
+    coaValue:       acc.coaValue       + r.coaValue,
+    totalIncome:    acc.totalIncome    + r.totalIncome,
+    totalReceived:  acc.totalReceived  + r.combinedReceived,
+    totalSubmitted: acc.totalSubmitted + r.combinedSubmitted,
+    totalRetention: acc.totalRetention + r.combinedRetention,
+    balance:        acc.balance        + r.combinedBalance,
+    claimsCount:    acc.claimsCount    + r.claimsCount,
+  }), { contractValue: 0, coaValue: 0, totalIncome: 0, totalReceived: 0, totalSubmitted: 0, totalRetention: 0, balance: 0, claimsCount: 0 })
+
+  const exportRows = rows.flatMap(r => ([
+    { project: r.proj.name, contractNo: r.proj.contractNo, label: 'Contract Value', totalIncome: r.contractValue, received: r.totalReceived, submitted: r.totalSubmitted, retention: r.totalRetention, balance: r.balance, progress: pct(r.totalReceived + r.totalSubmitted, r.contractValue), claims: r.claimsCount, type: 'contract' },
+    { project: '', contractNo: '', label: 'COA Value', totalIncome: r.coaValue, received: r.coaReceived, submitted: r.coaSubmitted, retention: r.coaRetention, balance: r.coaBalance, progress: pct(r.coaReceived + r.coaSubmitted, r.coaValue), claims: '', type: 'coa' },
+    { project: '', contractNo: '', label: 'Total', totalIncome: r.totalIncome, received: r.combinedReceived, submitted: r.combinedSubmitted, retention: r.combinedRetention, balance: r.combinedBalance, progress: r.progressPct, claims: r.claimsCount, type: 'total' },
+  ]))
+
+  const exportToExcel = () => {
+    const esc = (v) => String(v ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    const money = (v) => Math.round(v || 0)
+    const bodyRows = exportRows.map(r => `
+      <tr class="${r.type}">
+        <td>${esc(r.project)}</td>
+        <td>${esc(r.label)}</td>
+        <td>${money(r.totalIncome)}</td>
+        <td>${money(r.received)}</td>
+        <td>${money(r.submitted)}</td>
+        <td>${money(r.retention)}</td>
+        <td>${money(Math.max(0, r.balance))}</td>
+        <td>${r.progress || 0}%</td>
+        <td>${esc(r.claims)}</td>
+      </tr>
+    `).join('')
+    const html = `
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+          <style>
+            table { border-collapse: collapse; font-family: Arial, sans-serif; }
+            th { background: #ffc000; border: 1px solid #808080; font-weight: bold; }
+            td { border: 1px solid #808080; padding: 4px 8px; }
+            .contract td:nth-child(n+3) { background: #ffff00; }
+            .coa td:nth-child(n+3) { background: #fdebd3; color: #7c2d12; }
+            .total td:nth-child(n+3) { background: #fbe2d5; }
+            .grand td { font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <table>
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Total Income</th>
+                <th>Amount</th>
+                <th>Received</th>
+                <th>Submitted</th>
+                <th>Retention Held</th>
+                <th>Balance</th>
+                <th>Progress</th>
+                <th>Claims</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${bodyRows}
+              <tr class="grand">
+                <td>Total</td>
+                <td></td>
+                <td>${money(totals.totalIncome)}</td>
+                <td>${money(totals.totalReceived)}</td>
+                <td>${money(totals.totalSubmitted)}</td>
+                <td>${money(totals.totalRetention)}</td>
+                <td>${money(Math.max(0, totals.balance))}</td>
+                <td>${pct(totals.totalReceived + totals.totalSubmitted, totals.totalIncome)}%</td>
+                <td>${totals.claimsCount}</td>
+              </tr>
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `contract-coa-payment-summary-${new Date().toISOString().slice(0, 10)}.xls`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="space-y-6">
-      <SectionTitle
-        title="Report 1 — Contract vs Payment Summary"
-        subtitle="Tracks payment progress against the main contract value for each project"
-      />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <SectionTitle
+          title="Report 1 — Contract + COA vs Payment Summary"
+          subtitle="Tracks payment progress against contract value and approved COA value for each project"
+        />
+        <button
+          type="button"
+          onClick={exportToExcel}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-amber-400 text-slate-900 text-sm font-semibold hover:bg-amber-500 transition-colors shadow-sm"
+        >
+          <Download size={16} />
+          Export to Excel
+        </button>
+      </div>
 
       {/* Stacked Bar Chart */}
       <div className="rounded-xl border border-slate-200 overflow-hidden">
@@ -269,65 +377,42 @@ function Report1({ projects, payments, selectedProject }) {
         </div>
       </div>
 
-      {/* Detail Table */}
       <div className="overflow-x-auto rounded-xl border border-slate-200">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm border-collapse">
           <thead>
-            <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Project</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Contract Value</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Received</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Submitted</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Retention Held</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Balance</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Progress</th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Claims</th>
+            <tr className="bg-amber-400 border-b border-amber-500">
+              <th className="text-left px-4 py-3 text-xs font-bold text-slate-800">Project</th>
+              <th className="text-left px-4 py-3 text-xs font-bold text-slate-800">Total Income</th>
+              <th className="text-right px-4 py-3 text-xs font-bold text-slate-800">Amount</th>
+              <th className="text-right px-4 py-3 text-xs font-bold text-slate-800">Received</th>
+              <th className="text-right px-4 py-3 text-xs font-bold text-slate-800">Submitted</th>
+              <th className="text-right px-4 py-3 text-xs font-bold text-slate-800">Retention Held</th>
+              <th className="text-right px-4 py-3 text-xs font-bold text-slate-800">Balance</th>
+              <th className="text-center px-4 py-3 text-xs font-bold text-slate-800">Progress</th>
+              <th className="text-center px-4 py-3 text-xs font-bold text-slate-800">Claims</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody>
             {rows.map(r => (
-              <tr key={r.proj.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-3">
-                  <p className="font-semibold text-slate-800 text-xs leading-snug">{r.proj.name}</p>
-                  <p className="text-xs text-slate-400">{r.proj.contractNo}</p>
-                </td>
-                <td className="px-4 py-3 text-right font-semibold text-slate-800">{fmt(r.contractValue)}</td>
-                <td className="px-4 py-3 text-right font-semibold text-emerald-700">{fmt(r.totalReceived)}</td>
-                <td className="px-4 py-3 text-right font-medium text-blue-600">{fmt(r.totalSubmitted)}</td>
-                <td className="px-4 py-3 text-right font-medium text-amber-600">{fmt(r.totalRetention)}</td>
-                <td className="px-4 py-3 text-right font-semibold text-slate-700">{fmt(Math.max(0, r.balance))}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2 min-w-[100px]">
-                    <ProgressBar
-                      value={r.totalReceived + r.totalSubmitted}
-                      max={r.contractValue}
-                      color={r.progressPct >= 80 ? 'bg-emerald-500' : r.progressPct >= 40 ? 'bg-blue-500' : 'bg-amber-400'}
-                      className="flex-1"
-                    />
-                    <span className="text-xs font-bold text-slate-600 w-8 text-right shrink-0">{r.progressPct}%</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <Badge variant="slate">{r.claimsCount}</Badge>
-                </td>
-              </tr>
+              <ProjectSummaryRows key={r.proj.id} row={r} />
             ))}
           </tbody>
           {rows.length > 1 && (
             <tfoot>
-              <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold">
+              <tr className="bg-slate-100 border-t-2 border-slate-300 font-bold">
                 <td className="px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wide">TOTAL</td>
-                <td className="px-4 py-3 text-right text-slate-800">{fmt(totals.contractValue)}</td>
+                <td />
+                <td className="px-4 py-3 text-right text-slate-800">{fmt(totals.totalIncome)}</td>
                 <td className="px-4 py-3 text-right text-emerald-700">{fmt(totals.totalReceived)}</td>
                 <td className="px-4 py-3 text-right text-blue-600">{fmt(totals.totalSubmitted)}</td>
                 <td className="px-4 py-3 text-right text-amber-600">{fmt(totals.totalRetention)}</td>
                 <td className="px-4 py-3 text-right text-slate-700">{fmt(Math.max(0, totals.balance))}</td>
                 <td className="px-4 py-3 text-center">
                   <span className="text-xs font-bold text-slate-600">
-                    {pct(totals.totalReceived + totals.totalSubmitted, totals.contractValue)}%
+                    {pct(totals.totalReceived + totals.totalSubmitted, totals.totalIncome)}%
                   </span>
                 </td>
-                <td />
+                <td className="px-4 py-3 text-center"><Badge variant="slate">{totals.claimsCount}</Badge></td>
               </tr>
             </tfoot>
           )}
@@ -339,6 +424,87 @@ function Report1({ projects, payments, selectedProject }) {
         <RetentionDetail rows={rows} />
       )}
     </div>
+  )
+}
+
+function ProjectSummaryRows({ row: r }) {
+  const lineRows = [
+    {
+      id: 'contract',
+      label: 'Contract Value',
+      amount: r.contractValue,
+      received: r.totalReceived,
+      submitted: r.totalSubmitted,
+      retention: r.totalRetention,
+      balance: r.balance,
+      progress: pct(r.totalReceived + r.totalSubmitted, r.contractValue),
+      claims: r.claimsCount,
+      className: 'bg-yellow-50',
+      valueClass: 'bg-yellow-100',
+    },
+    {
+      id: 'coa',
+      label: 'COA Value',
+      amount: r.coaValue,
+      received: r.coaReceived,
+      submitted: r.coaSubmitted,
+      retention: r.coaRetention,
+      balance: r.coaBalance,
+      progress: pct(r.coaReceived + r.coaSubmitted, r.coaValue),
+      claims: '',
+      className: 'bg-white',
+      valueClass: 'bg-orange-100 text-orange-900',
+    },
+    {
+      id: 'total',
+      label: 'Total',
+      amount: r.totalIncome,
+      received: r.combinedReceived,
+      submitted: r.combinedSubmitted,
+      retention: r.combinedRetention,
+      balance: r.combinedBalance,
+      progress: r.progressPct,
+      claims: r.claimsCount,
+      className: 'bg-orange-50 border-b-2 border-slate-300',
+      valueClass: 'bg-orange-100',
+    },
+  ]
+
+  return (
+    <>
+      {lineRows.map((line, index) => (
+        <tr key={`${r.proj.id}-${line.id}`} className={clsx('border-b border-slate-200', line.className)}>
+          <td className="px-4 py-2 align-top">
+            {index === 0 && (
+              <>
+                <p className="font-semibold text-slate-800 text-xs leading-snug">{r.proj.name}</p>
+                <p className="text-xs text-slate-500">{r.proj.contractNo}</p>
+              </>
+            )}
+          </td>
+          <td className="px-4 py-2 font-medium text-slate-700">{line.label}</td>
+          <td className={clsx('px-4 py-2 text-right font-semibold', line.valueClass)}>{fmt(line.amount)}</td>
+          <td className={clsx('px-4 py-2 text-right font-semibold text-emerald-700', line.valueClass)}>{fmt(line.received)}</td>
+          <td className={clsx('px-4 py-2 text-right font-medium text-blue-600', line.valueClass)}>{fmt(line.submitted)}</td>
+          <td className={clsx('px-4 py-2 text-right font-medium text-amber-600', line.valueClass)}>{fmt(line.retention)}</td>
+          <td className={clsx('px-4 py-2 text-right font-semibold text-slate-700', line.valueClass)}>{fmt(Math.max(0, line.balance))}</td>
+          <td className="px-4 py-2">
+            <div className="flex items-center gap-2 min-w-[100px]">
+              <ProgressBar
+                value={line.received + line.submitted}
+                max={line.amount}
+                color={line.progress >= 80 ? 'bg-emerald-500' : line.progress >= 40 ? 'bg-blue-500' : 'bg-amber-400'}
+                className="flex-1"
+              />
+              <span className="text-xs font-bold text-slate-600 w-8 text-right shrink-0">{line.progress}%</span>
+            </div>
+          </td>
+          <td className="px-4 py-2 text-center">
+            {line.claims !== '' && <Badge variant="slate">{line.claims}</Badge>}
+          </td>
+        </tr>
+      ))}
+    </>
   )
 }
 
