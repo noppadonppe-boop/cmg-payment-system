@@ -60,7 +60,7 @@ function computeStats(bondStatuses, projects, hasProjectAccess) {
 }
 
 export default function BondStatusPage() {
-  const { projects, bondStatuses, updateBondStatus } = useData()
+  const { projects, bondStatuses, updateBondStatus, updateProject } = useData()
   const { currentUser, can, hasProjectAccess } = useAuth()
   const isAccCMG = can('canUpdateBonds')
 
@@ -85,13 +85,23 @@ export default function BondStatusPage() {
   // Start editing a bond field for a project
   const startEdit = (projectId) => {
     const bs = bondStatuses.find(b => b.projectId === projectId)
-    if (!bs) return
+    const project = projects.find(p => p.id === projectId)
+    if (!bs || !project) return
     setEditing(prev => ({
       ...prev,
       [projectId]: {
-        performanceBond: { ...bs.performanceBond },
-        advanceBond:     { ...bs.advanceBond },
-        warrantyBond:    { ...bs.warrantyBond },
+        performanceBond: { 
+          ...bs.performanceBond,
+          ...project.performanceBond,
+        },
+        advanceBond: { 
+          ...bs.advanceBond,
+          ...project.advanceBond,
+        },
+        warrantyBond: { 
+          ...bs.warrantyBond,
+          ...project.warrantyBond,
+        },
       }
     }))
   }
@@ -112,7 +122,63 @@ export default function BondStatusPage() {
 
   const handleSave = async (projectId) => {
     setSaving(prev => ({ ...prev, [projectId]: true }))
-    await updateBondStatus(projectId, editing[projectId])
+    
+    const editData = editing[projectId]
+    
+    // Prepare bond status updates (submission tracking)
+    const bondStatusUpdates = {
+      performanceBond: {
+        status: editData.performanceBond.status,
+        submitDate: editData.performanceBond.submitDate || '',
+        note: editData.performanceBond.note || '',
+      },
+      advanceBond: {
+        status: editData.advanceBond.status,
+        submitDate: editData.advanceBond.submitDate || '',
+        note: editData.advanceBond.note || '',
+      },
+      warrantyBond: {
+        status: editData.warrantyBond.status,
+        submitDate: editData.warrantyBond.submitDate || '',
+        note: editData.warrantyBond.note || '',
+      },
+    }
+    
+    // Prepare project bond updates (contract data)
+    const projectBondUpdates = {
+      performanceBond: {
+        percent: editData.performanceBond.percent || 0,
+        value: editData.performanceBond.value || 0,
+        bankName: editData.performanceBond.bankName || '',
+        startDate: editData.performanceBond.startDate || '',
+        endDate: editData.performanceBond.endDate || '',
+        attachment: editData.performanceBond.attachment || '',
+        note: editData.performanceBond.note || '',
+      },
+      advanceBond: {
+        percent: editData.advanceBond.percent || 0,
+        value: editData.advanceBond.value || 0,
+        bankName: editData.advanceBond.bankName || '',
+        startDate: editData.advanceBond.startDate || '',
+        endDate: editData.advanceBond.endDate || '',
+        attachment: editData.advanceBond.attachment || '',
+        note: editData.advanceBond.note || '',
+      },
+      warrantyBond: {
+        percent: editData.warrantyBond.percent || 0,
+        value: editData.warrantyBond.value || 0,
+        bankName: editData.warrantyBond.bankName || '',
+        startDate: editData.warrantyBond.startDate || '',
+        endDate: editData.warrantyBond.endDate || '',
+        attachment: editData.warrantyBond.attachment || '',
+        note: editData.warrantyBond.note || '',
+      },
+    }
+    
+    // Update both bond status and project
+    await updateBondStatus(projectId, bondStatusUpdates)
+    await updateProject(projectId, projectBondUpdates)
+    
     setSaving(prev => ({ ...prev, [projectId]: false }))
     setSaved(prev => ({ ...prev, [projectId]: true }))
     setEditing(prev => { const n = { ...prev }; delete n[projectId]; return n })
@@ -261,26 +327,69 @@ export default function BondStatusPage() {
 
                           {/* Bond contract data (read-only) */}
                           <div className={clsx('px-4 py-3 grid grid-cols-2 gap-x-4 gap-y-1.5 border-b text-xs', hc.light, hc.border)}>
-                            <div>
-                              <span className="text-slate-400 font-medium">Value</span>
-                              <p className={clsx('font-semibold mt-0.5', hc.text)}>{fmtCurrency(projectBond?.value)}</p>
-                            </div>
-                            <div>
-                              <span className="text-slate-400 font-medium">Bank</span>
-                              <p className="text-slate-700 font-medium mt-0.5">{projectBond?.bankName || '—'}</p>
-                            </div>
-                            <div>
-                              <span className="text-slate-400 font-medium">Bond Start</span>
-                              <p className="text-slate-700 mt-0.5">{fmtDate(projectBond?.startDate)}</p>
-                            </div>
-                            <div>
-                              <span className="text-slate-400 font-medium">Bond Expiry</span>
-                              <p className="text-slate-700 mt-0.5">{fmtDate(projectBond?.endDate)}</p>
-                            </div>
-                            {projectBond?.attachment && (
-                              <div className="col-span-2">
-                                <AttachmentLink value={projectBond.attachment} className={clsx('flex items-center gap-1 font-medium', hc.text)} />
-                              </div>
+                            {isEditing ? (
+                              <>
+                                <div className="col-span-2">
+                                  <FormField label="Value (฿)">
+                                    <Input
+                                      type="number"
+                                      value={bStatus.value || ''}
+                                      onChange={e => setEditField(bs.projectId, bt.key, 'value', parseFloat(e.target.value) || 0)}
+                                    />
+                                  </FormField>
+                                </div>
+                                <div className="col-span-2">
+                                  <FormField label="Bank Name">
+                                    <Input
+                                      type="text"
+                                      value={bStatus.bankName || ''}
+                                      onChange={e => setEditField(bs.projectId, bt.key, 'bankName', e.target.value)}
+                                    />
+                                  </FormField>
+                                </div>
+                                <div>
+                                  <FormField label="Bond Start">
+                                    <Input
+                                      type="date"
+                                      value={bStatus.startDate || ''}
+                                      onChange={e => setEditField(bs.projectId, bt.key, 'startDate', e.target.value)}
+                                    />
+                                  </FormField>
+                                </div>
+                                <div>
+                                  <FormField label="Bond Expiry">
+                                    <Input
+                                      type="date"
+                                      value={bStatus.endDate || ''}
+                                      onChange={e => setEditField(bs.projectId, bt.key, 'endDate', e.target.value)}
+                                    />
+                                  </FormField>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div>
+                                  <span className="text-slate-400 font-medium">Value</span>
+                                  <p className={clsx('font-semibold mt-0.5', hc.text)}>{fmtCurrency(projectBond?.value)}</p>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 font-medium">Bank</span>
+                                  <p className="text-slate-700 font-medium mt-0.5">{projectBond?.bankName || '—'}</p>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 font-medium">Bond Start</span>
+                                  <p className="text-slate-700 mt-0.5">{fmtDate(projectBond?.startDate)}</p>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400 font-medium">Bond Expiry</span>
+                                  <p className="text-slate-700 mt-0.5">{fmtDate(projectBond?.endDate)}</p>
+                                </div>
+                                {projectBond?.attachment && (
+                                  <div className="col-span-2">
+                                    <AttachmentLink value={projectBond.attachment} className={clsx('flex items-center gap-1 font-medium', hc.text)} />
+                                  </div>
+                                )}
+                              </>
                             )}
                           </div>
 

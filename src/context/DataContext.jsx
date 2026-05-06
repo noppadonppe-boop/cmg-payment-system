@@ -392,6 +392,20 @@ export function DataProvider({ children }) {
     const batch = writeBatch(db)
     batch.set(docRef('coas', id), newCOA)
     batch.update(docRef('cors', coa.corId), { convertedToCOA: true, coaId: id })
+    
+    // Update project: add COA value to contract value and store original if not exists
+    const project = projects.find(p => p.id === coa.projectId)
+    if (project) {
+      const updates = {}
+      // Store original contract value if this is the first COA
+      if (!project.originalContractValue) {
+        updates.originalContractValue = project.contractValue
+      }
+      // Add COA value to current contract value
+      updates.contractValue = (project.contractValue || 0) + (coa.value || 0)
+      batch.update(docRef('projects', coa.projectId), updates)
+    }
+    
     await batch.commit()
     return newCOA
   }

@@ -53,11 +53,12 @@ function InfoRow({ label, value, wide }) {
 export default function ProjectDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { getProject } = useData()
+  const { getProject, getProjectCOAs } = useData()
   const { can, USERS, hasProjectAccess } = useAuth()
   const [activeTab, setActiveTab] = useState('general')
 
   const project = getProject(id)
+  const projectCOAs = getProjectCOAs(id)
 
   if (!project) {
     return (
@@ -108,7 +109,12 @@ export default function ProjectDetailPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Contract Value', value: `฿${new Intl.NumberFormat('en-US').format(project.contractValue || 0)}`, color: 'text-blue-700' },
+          { 
+            label: 'Contract Value', 
+            value: `฿${new Intl.NumberFormat('en-US').format(project.contractValue || 0)}`, 
+            color: 'text-blue-700',
+            sub: projectCOAs.length > 0 ? `+${projectCOAs.length} COA${projectCOAs.length > 1 ? 's' : ''}` : null
+          },
           { label: 'Contract Type', value: project.contractType || '—', color: 'text-slate-700' },
           { label: 'Retention', value: project.retentionRequired ? `${project.retentionPercent}%` : 'N/A', color: project.retentionRequired ? 'text-amber-600' : 'text-slate-400' },
           { label: 'Duration', value: project.startDate ? `${project.startDate} → ${project.finishDate}` : '—', color: 'text-slate-600' },
@@ -116,6 +122,7 @@ export default function ProjectDetailPage() {
           <Card key={s.label} className="!p-4">
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{s.label}</p>
             <p className={clsx('text-sm font-semibold mt-1 leading-snug', s.color)}>{s.value}</p>
+            {s.sub && <p className="text-[10px] text-purple-600 font-medium mt-0.5">{s.sub}</p>}
           </Card>
         ))}
       </div>
@@ -146,7 +153,7 @@ export default function ProjectDetailPage() {
 
         <div className="p-6">
           {activeTab === 'general'   && <DetailGeneral project={project} pmUser={pmUser} />}
-          {activeTab === 'contract'  && <DetailContract project={project} />}
+          {activeTab === 'contract'  && <DetailContract project={project} projectCOAs={projectCOAs} />}
           {activeTab === 'bank-bond' && <DetailBankBond project={project} />}
           {activeTab === 'insurance' && <DetailInsurance project={project} />}
           {activeTab === 'tax'       && <DetailTax project={project} />}
@@ -172,27 +179,104 @@ function DetailGeneral({ project, pmUser }) {
   )
 }
 
-function DetailContract({ project }) {
+function DetailContract({ project, projectCOAs }) {
+  const originalValue = project.originalContractValue || project.contractValue
+  const totalCOAValue = projectCOAs.reduce((sum, coa) => sum + (coa.value || 0), 0)
+  const hasCOAs = projectCOAs.length > 0
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
-      <InfoRow label="Contract No." value={project.contractNo} />
-      <InfoRow label="PO No." value={project.poNo} />
-      <InfoRow label="Contract Value" value={fmtCurrency(project.contractValue)} />
-      <InfoRow label="Contract Type" value={project.contractType} />
-      <InfoRow label="Start Date" value={fmtDate(project.startDate)} />
-      <InfoRow label="Finish Date" value={fmtDate(project.finishDate)} />
-      <InfoRow
-        label="Retention"
-        value={project.retentionRequired
-          ? <span className="text-amber-600 font-semibold">{project.retentionPercent}%</span>
-          : <Badge variant="slate">Not Required</Badge>
-        }
-      />
-      <InfoRow
-        label="Attachment"
-        value={project.contractAttachment ? <AttachmentLink value={project.contractAttachment} className="flex items-center gap-1" /> : null}
-      />
-      {project.contractNote && <InfoRow label="Note" value={project.contractNote} wide />}
+    <div className="space-y-6">
+      {/* Contract Info */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
+        <InfoRow label="Contract No." value={project.contractNo} />
+        <InfoRow label="PO No." value={project.poNo} />
+        <InfoRow 
+          label="Original Contract Value" 
+          value={fmtCurrency(originalValue)} 
+        />
+        <InfoRow label="Contract Type" value={project.contractType} />
+        <InfoRow label="Start Date" value={fmtDate(project.startDate)} />
+        <InfoRow label="Finish Date" value={fmtDate(project.finishDate)} />
+        <InfoRow
+          label="Retention"
+          value={project.retentionRequired
+            ? <span className="text-amber-600 font-semibold">{project.retentionPercent}%</span>
+            : <Badge variant="slate">Not Required</Badge>
+          }
+        />
+        <InfoRow
+          label="Attachment"
+          value={project.contractAttachment ? <AttachmentLink value={project.contractAttachment} className="flex items-center gap-1" /> : null}
+        />
+        {project.contractNote && <InfoRow label="Note" value={project.contractNote} wide />}
+      </div>
+
+      {/* COA Section */}
+      {hasCOAs && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Change Order Approvals (COA)</h3>
+            <Badge variant="purple">{projectCOAs.length} COA{projectCOAs.length > 1 ? 's' : ''}</Badge>
+          </div>
+
+          {/* COA Table */}
+          <div className="rounded-xl border border-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">COA No.</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Description</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">Value</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Approved Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Attachment</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {projectCOAs.map((coa, idx) => (
+                  <tr key={coa.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-slate-800">{coa.coaNo}</td>
+                    <td className="px-4 py-3 text-slate-600">{coa.description}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-purple-700">{fmtCurrency(coa.value)}</td>
+                    <td className="px-4 py-3 text-slate-500">{fmtDate(coa.approvedAt)}</td>
+                    <td className="px-4 py-3">
+                      {coa.attachment ? (
+                        <AttachmentLink value={coa.attachment} className="flex items-center gap-1 text-blue-600 hover:text-blue-700" />
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-purple-50 font-semibold">
+                  <td colSpan="2" className="px-4 py-3 text-slate-700">Total COA Value</td>
+                  <td className="px-4 py-3 text-right text-purple-700">{fmtCurrency(totalCOAValue)}</td>
+                  <td colSpan="2" className="px-4 py-3"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Updated Contract Value */}
+          <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-xl">
+            <div className="flex items-center gap-2">
+              <TrendingUp size={18} className="text-blue-600" />
+              <span className="text-sm font-semibold text-blue-900">Updated Contract Value</span>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-blue-600 mb-0.5">Original + COAs</p>
+              <p className="text-lg font-bold text-blue-700">{fmtCurrency(project.contractValue)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* No COAs message */}
+      {!hasCOAs && (
+        <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+          <Info size={14} className="text-slate-400" />
+          <p className="text-xs text-slate-500">No Change Order Approvals (COA) for this project yet.</p>
+        </div>
+      )}
     </div>
   )
 }

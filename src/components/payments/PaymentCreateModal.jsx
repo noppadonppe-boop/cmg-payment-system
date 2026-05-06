@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Save, Calculator } from 'lucide-react'
+import { X, Save, Calculator, Plus, Trash2 } from 'lucide-react'
 import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { FormField, Input, Textarea, Select } from '../ui/FormField'
@@ -37,7 +37,7 @@ function fmtInput(val) {
 }
 
 export default function PaymentCreateModal({ projects, onClose }) {
-  const { addPayment, payments } = useData()
+  const { addPayment, payments, getProjectCOAs } = useData()
   const { currentUser } = useAuth()
 
   const [form, setForm] = useState({
@@ -54,9 +54,169 @@ export default function PaymentCreateModal({ projects, onClose }) {
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
 
+  // Claim type state
+  const [claimMainContract, setClaimMainContract] = useState(false)
+  const [claimCOA, setClaimCOA] = useState(false)
+  
+  // Main contract items state
+  const [mainContractItems, setMainContractItems] = useState([
+    { id: Date.now(), no: '1', description: '', value: '' }
+  ])
+  
+  // COA items state - array of { coaId, items: [...] }
+  const [coaItems, setCoaItems] = useState([])
+
   const set = (k, v) => {
     setForm(p => ({ ...p, [k]: v }))
     if (errors[k]) setErrors(p => { const e = { ...p }; delete e[k]; return e })
+  }
+
+  // Get current project and its COAs
+  const currentProject = projects.find(p => p.id === form.projectId)
+  const projectCOAs = form.projectId ? getProjectCOAs(form.projectId) : []
+
+  // Calculate max allowed value based on claim type
+  const getMaxAllowedValue = () => {
+    let maxValue = 0
+    
+    if (claimMainContract && currentProject) {
+      maxValue += currentProject.originalContractValue || currentProject.contractValue || 0
+    }
+    
+    if (claimCOA && coaItems.length > 0) {
+      coaItems.forEach(coaItem => {
+        const coa = projectCOAs.find(c => c.id === coaItem.coaId)
+        if (coa) {
+          maxValue += coa.value || 0
+        }
+      })
+    }
+    
+    return maxValue || Infinity
+  }
+
+  // Add main contract item
+  const addMainContractItem = () => {
+    const newNo = mainContractItems.length + 1
+    setMainContractItems([...mainContractItems, { 
+      id: Date.now(), 
+      no: String(newNo), 
+      description: '', 
+      value: '' 
+    }])
+  }
+
+  // Remove main contract item
+  const removeMainContractItem = (id) => {
+    if (mainContractItems.length === 1) return // Keep at least one row
+    const filtered = mainContractItems.filter(item => item.id !== id)
+    // Renumber items
+    const renumbered = filtered.map((item, idx) => ({ ...item, no: String(idx + 1) }))
+    setMainContractItems(renumbered)
+  }
+
+  // Update main contract item
+  const updateMainContractItem = (id, field, value) => {
+    setMainContractItems(items => 
+      items.map(item => item.id === id ? { ...item, [field]: value } : item)
+    )
+  }
+
+  // Calculate total from main contract items
+  const calculateMainContractTotal = () => {
+    return mainContractItems.reduce((sum, item) => {
+      return sum + parseCurrency(item.value)
+    }, 0)
+  }
+
+  // Add COA selection
+  const addCOASelection = (coaId) => {
+    if (!coaId || coaItems.some(item => item.coaId === coaId)) return
+    
+    setCoaItems([...coaItems, {
+      coaId,
+      items: [{ id: Date.now(), no: '1', description: '', value: '' }]
+    }])
+  }
+
+  // Remove COA selection
+  const removeCOASelection = (coaId) => {
+    setCoaItems(coaItems.filter(item => item.coaId !== coaId))
+  }
+
+  // Add item to specific COA
+  const addCOAItem = (coaId) => {
+    setCoaItems(coaItems.map(coaItem => {
+      if (coaItem.coaId === coaId) {
+        const newNo = coaItem.items.length + 1
+        return {
+          ...coaItem,
+          items: [...coaItem.items, { 
+            id: Date.now(), 
+            no: String(newNo), 
+            description: '', 
+            value: '' 
+          }]
+        }
+      }
+      return coaItem
+    }))
+  }
+
+  // Remove item from specific COA
+  const removeCOAItem = (coaId, itemId) => {
+    setCoaItems(coaItems.map(coaItem => {
+      if (coaItem.coaId === coaId) {
+        if (coaItem.items.length === 1) return coaItem // Keep at least one row
+        const filtered = coaItem.items.filter(item => item.id !== itemId)
+        // Renumber items
+        const renumbered = filtered.map((item, idx) => ({ ...item, no: String(idx + 1) }))
+        return { ...coaItem, items: renumbered }
+      }
+      return coaItem
+    }))
+  }
+
+  // Update COA item
+  const updateCOAItem = (coaId, itemId, field, value) => {
+    setCoaItems(coaItems.map(coaItem => {
+      if (coaItem.coaId === coaId) {
+        return {
+          ...coaItem,
+          items: coaItem.items.map(item => 
+            item.id === itemId ? { ...item, [field]: value } : item
+          )
+        }
+      }
+      return coaItem
+    }))
+  }
+
+  // Calculate total for specific COA
+  const calculateCOATotal = (coaId) => {
+    const coaItem = coaItems.find(item => item.coaId === coaId)
+    if (!coaItem) return 0
+    
+    return coaItem.items.reduce((sum, item) => {
+      return sum + parseCurrency(item.value)
+    }, 0)
+  }
+
+  // Calculate grand total from all sources
+  const calculateGrandTotal = () => {
+    let total = 0
+    
+    if (claimMainContract) {
+      total += calculateMainContractTotal()
+    }
+    
+    if (claimCOA) {
+      coaItems.forEach(coaItem => {
+        total += calculateCOATotal(coaItem.coaId)
+      })
+    }
+    
+    return total
   }
 
   // Auto-generate payment number based on project
@@ -68,7 +228,9 @@ export default function PaymentCreateModal({ projects, onClose }) {
     set('paymentNo', `PMT-${prefix}-${String(existing + 1).padStart(3, '0')}`)
   }
 
-  const value = parseCurrency(form.value)
+  // Use grand total for calculations
+  const grandTotal = calculateGrandTotal()
+  const value = grandTotal
   const adv   = parseCurrency(form.advanceDeduction)
   const ret   = parseCurrency(form.retentionReduce)
   const withTaxPercent = parseCurrency(form.withTaxPercent)
@@ -79,7 +241,55 @@ export default function PaymentCreateModal({ projects, onClose }) {
     if (!form.projectId)        errs.projectId = 'Select a project'
     if (!form.paymentNo.trim()) errs.paymentNo = 'Payment number is required'
     if (!form.detail.trim())    errs.detail    = 'Description is required'
-    if (!form.value || value <= 0) errs.value  = 'Enter a valid claim value'
+    
+    // Validate claim type selection
+    if (!claimMainContract && !claimCOA) {
+      errs.claimType = 'Please select at least one claim type (Main Contract or COA)'
+    }
+    
+    // Validate main contract items
+    if (claimMainContract) {
+      const hasEmptyItems = mainContractItems.some(item => !item.description.trim() || !item.value || parseCurrency(item.value) <= 0)
+      if (hasEmptyItems) {
+        errs.mainContractItems = 'All main contract items must have description and value'
+      }
+      
+      const total = calculateMainContractTotal()
+      const maxValue = currentProject?.originalContractValue || currentProject?.contractValue || 0
+      if (total > maxValue) {
+        errs.mainContractValue = `Total claim value (฿${total.toLocaleString()}) exceeds Main Contract Value (฿${maxValue.toLocaleString()})`
+      }
+    }
+    
+    // Validate COA selections and items
+    if (claimCOA) {
+      if (coaItems.length === 0) {
+        errs.selectedCOA = 'Please select at least one COA'
+      } else {
+        // Validate each COA's items
+        coaItems.forEach(coaItem => {
+          const coa = projectCOAs.find(c => c.id === coaItem.coaId)
+          const hasEmptyItems = coaItem.items.some(item => !item.description.trim() || !item.value || parseCurrency(item.value) <= 0)
+          
+          if (hasEmptyItems) {
+            errs[`coaItems_${coaItem.coaId}`] = `All items in ${coa?.coaNo || 'COA'} must have description and value`
+          }
+          
+          const total = calculateCOATotal(coaItem.coaId)
+          const maxValue = coa?.value || 0
+          if (total > maxValue) {
+            errs[`coaValue_${coaItem.coaId}`] = `Total claim value (฿${total.toLocaleString()}) exceeds ${coa?.coaNo} Value (฿${maxValue.toLocaleString()})`
+          }
+        })
+      }
+    }
+    
+    // Update form value with grand total
+    const grandTotal = calculateGrandTotal()
+    if (grandTotal <= 0) {
+      errs.value = 'Total claim value must be greater than 0'
+    }
+    
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -88,27 +298,71 @@ export default function PaymentCreateModal({ projects, onClose }) {
     if (!validate()) return
     setSaving(true)
     await new Promise(r => setTimeout(r, 350))
-    addPayment({
+    
+    // Calculate grand total
+    const grandTotal = calculateGrandTotal()
+    
+    // Recalculate financial values based on grand total
+    const finalValue = grandTotal
+    const finalAdv = parseCurrency(form.advanceDeduction)
+    const finalRet = parseCurrency(form.retentionReduce)
+    const finalWithTaxPercent = parseCurrency(form.withTaxPercent)
+    const { grossClaim: finalGrossClaim, withTaxAmount: finalWithTaxAmount, balanceValue: finalBalance } = 
+      calculatePaymentBalance(finalValue, finalAdv, finalRet, finalWithTaxPercent)
+    
+    // Prepare payment data
+    const paymentData = {
       projectId:        form.projectId,
-      type:             'main',
+      type:             claimCOA ? 'coa' : 'main',
       paymentNo:        form.paymentNo,
       detail:           form.detail,
-      value,
-      advanceDeduction: adv,
-      retentionReduce:  ret,
-      withTaxPercent,
-      withTaxValue:     withTaxAmount,
-      grossClaimValue:  grossClaim,
-      balanceValue:     balance,
+      value:            finalValue,
+      advanceDeduction: finalAdv,
+      retentionReduce:  finalRet,
+      withTaxPercent:   finalWithTaxPercent,
+      withTaxValue:     finalWithTaxAmount,
+      grossClaimValue:  finalGrossClaim,
+      balanceValue:     finalBalance,
       attachment:       form.attachment,
       note:             form.note,
       status:           'In Progress',
       createdBy:        currentUser.id,
-      invoiceNo:        null, invoiceDueDate: null, invoiceNote: null,
+      invoiceNo:        null, 
+      invoiceDueDate:   null, 
+      invoiceNote:      null,
       invoiceSubmittedAt: null,
-      receivedDate: null, receivedAttachment: null, receivedNote: null,
-      receivedBy: null, receivedAt: null,
-    })
+      receivedDate:     null, 
+      receivedAttachment: null, 
+      receivedNote:     null,
+      receivedBy:       null, 
+      receivedAt:       null,
+    }
+    
+    // Add claim-specific data
+    if (claimMainContract) {
+      paymentData.mainContractItems = mainContractItems.map(item => ({
+        no: item.no,
+        description: item.description,
+        value: parseCurrency(item.value)
+      }))
+    }
+    
+    if (claimCOA) {
+      paymentData.coaItems = coaItems.map(coaItem => {
+        const coa = projectCOAs.find(c => c.id === coaItem.coaId)
+        return {
+          coaId: coaItem.coaId,
+          coaNo: coa?.coaNo,
+          items: coaItem.items.map(item => ({
+            no: item.no,
+            description: item.description,
+            value: parseCurrency(item.value)
+          }))
+        }
+      })
+    }
+    
+    addPayment(paymentData)
     setSaving(false)
     onClose()
   }
@@ -165,6 +419,292 @@ export default function PaymentCreateModal({ projects, onClose }) {
           </FormField>
         </div>
 
+        {/* Claim Type Selection */}
+        <div className="rounded-xl border border-slate-200 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-700">
+            <span className="text-sm font-semibold text-white">Claim Type</span>
+          </div>
+          <div className="p-4 space-y-4">
+            {errors.claimType && (
+              <div className="text-xs text-rose-600 font-medium">{errors.claimType}</div>
+            )}
+            
+            {/* Claim Main Contract Checkbox */}
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={claimMainContract}
+                  onChange={(e) => {
+                    setClaimMainContract(e.target.checked)
+                  }}
+                  className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-slate-700">Claim Main Contract</span>
+              </label>
+
+              {claimMainContract && (
+                <div className="ml-6 space-y-3">
+                  {currentProject && (
+                    <div className="text-xs text-slate-600 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
+                      <span className="font-semibold">Main Contract Value: </span>
+                      <span className="text-blue-700 font-bold">
+                        ฿{(currentProject.originalContractValue || currentProject.contractValue || 0).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {errors.mainContractItems && (
+                    <div className="text-xs text-rose-600 font-medium">{errors.mainContractItems}</div>
+                  )}
+                  {errors.mainContractValue && (
+                    <div className="text-xs text-rose-600 font-medium">{errors.mainContractValue}</div>
+                  )}
+
+                  {/* Main Contract Items Table */}
+                  <div className="rounded-lg border border-slate-200 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-16">No.</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Description</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-40">Value (฿)</th>
+                          <th className="px-3 py-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {mainContractItems.map((item, idx) => (
+                          <tr key={item.id} className="hover:bg-slate-50">
+                            <td className="px-3 py-2 text-slate-600 font-medium">{item.no}</td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="text"
+                                value={item.description}
+                                onChange={(e) => updateMainContractItem(item.id, 'description', e.target.value)}
+                                placeholder="Enter description..."
+                                className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={fmtInput(item.value)}
+                                onChange={(e) => {
+                                  updateMainContractItem(item.id, 'value', sanitizeCurrencyInput(e.target.value))
+                                }}
+                                placeholder="0"
+                                className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              {mainContractItems.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeMainContractItem(item.id)}
+                                  className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="bg-slate-50">
+                          <td colSpan="2" className="px-3 py-2 text-right font-semibold text-slate-700">Total:</td>
+                          <td className="px-3 py-2 font-bold text-blue-700">
+                            ฿{calculateMainContractTotal().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={addMainContractItem}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+                  >
+                    <Plus size={14} />
+                    Add Row
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Claim COA Checkbox */}
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={claimCOA}
+                  onChange={(e) => {
+                    setClaimCOA(e.target.checked)
+                    if (!e.target.checked) {
+                      setCoaItems([])
+                    }
+                  }}
+                  className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-slate-700">Claim COA</span>
+              </label>
+
+              {claimCOA && (
+                <div className="ml-6 space-y-4">
+                  {projectCOAs.length === 0 ? (
+                    <div className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
+                      No COA available for this project
+                    </div>
+                  ) : (
+                    <>
+                      {errors.selectedCOA && (
+                        <div className="text-xs text-rose-600 font-medium">{errors.selectedCOA}</div>
+                      )}
+                      
+                      {/* COA Selection Dropdown */}
+                      <FormField label="Select COA to add">
+                        <div className="flex gap-2">
+                          <Select 
+                            value="" 
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                addCOASelection(e.target.value)
+                                e.target.value = '' // Reset dropdown
+                              }
+                            }}
+                          >
+                            <option value="">— Select COA to add —</option>
+                            {projectCOAs
+                              .filter(coa => !coaItems.some(item => item.coaId === coa.id))
+                              .map(coa => (
+                                <option key={coa.id} value={coa.id}>
+                                  {coa.coaNo} - {coa.description} (฿{coa.value?.toLocaleString()})
+                                </option>
+                              ))}
+                          </Select>
+                        </div>
+                      </FormField>
+
+                      {/* Display selected COAs with their tables */}
+                      {coaItems.map((coaItem) => {
+                        const coa = projectCOAs.find(c => c.id === coaItem.coaId)
+                        if (!coa) return null
+
+                        return (
+                          <div key={coaItem.coaId} className="border border-purple-200 rounded-lg overflow-hidden">
+                            {/* COA Header */}
+                            <div className="bg-purple-600 px-4 py-2.5 flex items-center justify-between">
+                              <div>
+                                <h4 className="text-sm font-semibold text-white">{coa.coaNo}</h4>
+                                <p className="text-xs text-purple-100">{coa.description}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeCOASelection(coaItem.coaId)}
+                                className="p-1 text-white hover:bg-purple-700 rounded transition-colors"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+
+                            <div className="p-3 space-y-3">
+                              {/* COA Value Info */}
+                              <div className="text-xs text-slate-600 bg-purple-50 px-3 py-2 rounded-lg border border-purple-200">
+                                <span className="font-semibold">COA Value: </span>
+                                <span className="text-purple-700 font-bold">
+                                  ฿{(coa.value || 0).toLocaleString()}
+                                </span>
+                              </div>
+
+                              {/* Error messages for this COA */}
+                              {errors[`coaItems_${coaItem.coaId}`] && (
+                                <div className="text-xs text-rose-600 font-medium">{errors[`coaItems_${coaItem.coaId}`]}</div>
+                              )}
+                              {errors[`coaValue_${coaItem.coaId}`] && (
+                                <div className="text-xs text-rose-600 font-medium">{errors[`coaValue_${coaItem.coaId}`]}</div>
+                              )}
+
+                              {/* COA Items Table */}
+                              <div className="rounded-lg border border-slate-200 overflow-hidden">
+                                <table className="w-full text-sm">
+                                  <thead className="bg-slate-50 border-b border-slate-200">
+                                    <tr>
+                                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-16">No.</th>
+                                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Description</th>
+                                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-40">Value (฿)</th>
+                                      <th className="px-3 py-2 w-10"></th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {coaItem.items.map((item) => (
+                                      <tr key={item.id} className="hover:bg-slate-50">
+                                        <td className="px-3 py-2 text-slate-600 font-medium">{item.no}</td>
+                                        <td className="px-3 py-2">
+                                          <input
+                                            type="text"
+                                            value={item.description}
+                                            onChange={(e) => updateCOAItem(coaItem.coaId, item.id, 'description', e.target.value)}
+                                            placeholder="Enter description..."
+                                            className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                          />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                          <input
+                                            type="text"
+                                            inputMode="decimal"
+                                            value={fmtInput(item.value)}
+                                            onChange={(e) => {
+                                              updateCOAItem(coaItem.coaId, item.id, 'value', sanitizeCurrencyInput(e.target.value))
+                                            }}
+                                            placeholder="0"
+                                            className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                          />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                          {coaItem.items.length > 1 && (
+                                            <button
+                                              type="button"
+                                              onClick={() => removeCOAItem(coaItem.coaId, item.id)}
+                                              className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors"
+                                            >
+                                              <Trash2 size={14} />
+                                            </button>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                    <tr className="bg-purple-50">
+                                      <td colSpan="2" className="px-3 py-2 text-right font-semibold text-slate-700">Total:</td>
+                                      <td className="px-3 py-2 font-bold text-purple-700">
+                                        ฿{calculateCOATotal(coaItem.coaId).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                      <td></td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => addCOAItem(coaItem.coaId)}
+                                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors"
+                              >
+                                <Plus size={14} />
+                                Add Row
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Financial Calculation Section */}
         <div className="rounded-xl border border-slate-200 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-700">
@@ -172,20 +712,32 @@ export default function PaymentCreateModal({ projects, onClose }) {
             <span className="text-sm font-semibold text-white">Financial Calculation</span>
           </div>
           <div className="p-4 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <FormField label="Claim Value (฿)" required error={errors.value}>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">฿</span>
-                  <Input
-                    inputMode="decimal"
-                    placeholder="0"
-                    value={fmtInput(form.value)}
-                    onChange={e => set('value', sanitizeCurrencyInput(e.target.value))}
-                    error={errors.value}
-                    className="pl-7"
-                  />
+            {/* Grand Total Display */}
+            {(claimMainContract || claimCOA) && (
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Total Claim Value</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {claimMainContract && claimCOA && 'Main Contract + COA'}
+                      {claimMainContract && !claimCOA && 'Main Contract'}
+                      {!claimMainContract && claimCOA && 'COA'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-blue-700">
+                      ฿{grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
                 </div>
-              </FormField>
+              </div>
+            )}
+
+            {errors.value && (
+              <div className="text-xs text-rose-600 font-medium">{errors.value}</div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <FormField label="Advance Deduction (฿)">
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">฿</span>
