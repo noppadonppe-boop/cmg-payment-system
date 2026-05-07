@@ -180,9 +180,21 @@ function DetailGeneral({ project, pmUser }) {
 }
 
 function DetailContract({ project, projectCOAs }) {
+  const { payments } = useData()
   const originalValue = project.originalContractValue || project.contractValue
   const totalCOAValue = projectCOAs.reduce((sum, coa) => sum + (coa.value || 0), 0)
   const hasCOAs = projectCOAs.length > 0
+  
+  // Calculate remaining balance for each COA
+  const getCOABalance = (coaId) => {
+    const coa = projectCOAs.find(c => c.id === coaId)
+    if (!coa) return 0
+    
+    const coaPayments = payments.filter(p => p.coaId === coaId && p.type === 'coa')
+    const totalClaimed = coaPayments.reduce((sum, p) => sum + (p.balanceValue || 0), 0)
+    
+    return (coa.value || 0) - totalClaimed
+  }
 
   return (
     <div className="space-y-6">
@@ -226,31 +238,43 @@ function DetailContract({ project, projectCOAs }) {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">COA No.</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Description</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">Value</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">COA Value</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">COA Balance</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Approved Date</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Attachment</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {projectCOAs.map((coa, idx) => (
-                  <tr key={coa.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-slate-800">{coa.coaNo}</td>
-                    <td className="px-4 py-3 text-slate-600">{coa.description}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-purple-700">{fmtCurrency(coa.value)}</td>
-                    <td className="px-4 py-3 text-slate-500">{fmtDate(coa.approvedAt)}</td>
-                    <td className="px-4 py-3">
-                      {coa.attachment ? (
-                        <AttachmentLink value={coa.attachment} className="flex items-center gap-1 text-blue-600 hover:text-blue-700" />
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {projectCOAs.map((coa, idx) => {
+                  const balance = getCOABalance(coa.id)
+                  return (
+                    <tr key={coa.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 font-medium text-slate-800">{coa.coaNo}</td>
+                      <td className="px-4 py-3 text-slate-600">{coa.description}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-purple-700">{fmtCurrency(coa.value)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={clsx(
+                          'font-semibold',
+                          balance > 0 ? 'text-emerald-600' : balance === 0 ? 'text-slate-400' : 'text-rose-600'
+                        )}>
+                          {fmtCurrency(balance)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">{fmtDate(coa.approvedAt)}</td>
+                      <td className="px-4 py-3">
+                        {coa.attachment ? (
+                          <AttachmentLink value={coa.attachment} className="flex items-center gap-1 text-blue-600 hover:text-blue-700" />
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
                 <tr className="bg-purple-50 font-semibold">
                   <td colSpan="2" className="px-4 py-3 text-slate-700">Total COA Value</td>
                   <td className="px-4 py-3 text-right text-purple-700">{fmtCurrency(totalCOAValue)}</td>
-                  <td colSpan="2" className="px-4 py-3"></td>
+                  <td colSpan="3" className="px-4 py-3"></td>
                 </tr>
               </tbody>
             </table>

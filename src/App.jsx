@@ -69,7 +69,7 @@ function AppContent() {
         <Route
           path="/admin"
           element={
-            <ProtectedRoute requireRoles={['SuperAdmin', 'Admin']}>
+            <ProtectedRoute requireRoles={['MasterAdmin', 'SuperAdmin', 'Admin']}>
               <AdminPanel />
             </ProtectedRoute>
           }

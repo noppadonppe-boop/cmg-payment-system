@@ -293,7 +293,9 @@ export function DataProvider({ children }) {
 
     const snapshot = (colName, setter) =>
       onSnapshot(col(colName), snap => {
-        setter(snap.docs.map(d => ({ ...d.data(), id: d.id })))
+        const data = snap.docs.map(d => ({ ...d.data(), id: d.id }))
+        console.log(`Firestore ${colName} updated:`, data.length, 'items')
+        setter(data)
         done()
       }, err => { console.error(`Firestore ${colName}:`, err); done() })
 
@@ -351,7 +353,9 @@ export function DataProvider({ children }) {
     const today = new Date().toISOString().split('T')[0]
     const id = `pay${Date.now()}`
     const newPayment = { ...payment, id, createdAt: today }
+    console.log('Adding payment to Firestore:', newPayment)
     await setDoc(docRef('payments', id), newPayment)
+    console.log('Payment added successfully:', id)
     return newPayment
   }
 

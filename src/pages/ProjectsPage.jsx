@@ -22,10 +22,10 @@ function formatDate(d) {
 
 export default function ProjectsPage() {
   const { projects, deleteProject } = useData()
-  const { can, hasProjectAccess, currentUser } = useAuth()
+  const { can, hasProjectAccess, userProfile } = useAuth()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
-  const isSuperAdmin = currentUser?.role === 'SuperAdmin'
+  const isSuperAdmin = userProfile?.role?.includes('SuperAdmin') || userProfile?.role?.includes('MasterAdmin')
 
   async function handleDeleteProject(id, name) {
     if (!window.confirm(`ยืนยันการลบโปรเจกต์ "${name}"?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) return

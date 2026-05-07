@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { X, Save, Calculator, Plus, Trash2 } from 'lucide-react'
-import { deleteField } from 'firebase/firestore'
 import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { FormField, Input, Textarea, Select } from '../ui/FormField'
@@ -37,60 +36,65 @@ function fmtInput(val) {
   return hasDecimal ? `${formattedWhole}.${decimal}` : formattedWhole
 }
 
-export default function PaymentEditModal({ payment, projects, onClose, onSaved }) {
-  const { updatePayment, payments, getProjectCOAs } = useData()
+export default function DraftEditModal({ payment, onClose, onSaved }) {
+  const { updatePayment, getProjectCOAs, projects } = useData()
   const { currentUser } = useAuth()
 
-  // Helper to determine if it's an old legacy record
-  const isLegacyRecord = payment && payment.value > 0 && payment.claimMainContract === undefined && payment.claimCOA === undefined;
-
   const [form, setForm] = useState({
-    projectId: payment?.projectId ?? projects[0]?.id ?? '',
+    projectId: payment?.projectId ?? '',
     paymentNo: payment?.paymentNo ?? '',
     detail: payment?.detail ?? '',
-    value: payment?.value ? String(payment.value) : '',
-    withTaxPercent: payment?.withTaxPercent ? String(payment.withTaxPercent) : '',
+    value: payment?.value ?? '',
+    withTaxPercent: payment?.withTaxPercent ?? '',
     attachment: payment?.attachment ?? '',
     note: payment?.note ?? '',
-    otherClaim: payment?.otherClaim ? String(payment.otherClaim) : '',
+    otherClaim: payment?.otherClaim ?? '', // Other Claim amount
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
 
-  // Advance deduction settings
-  const hasLegacyAdvance = isLegacyRecord && (payment?.advanceDeduction > 0);
-  const [useAdvanceDeduction, setUseAdvanceDeduction] = useState(!!payment?.advanceDeductionValue || hasLegacyAdvance)
-  const [advanceDeductionType, setAdvanceDeductionType] = useState(payment?.advanceDeductionType ?? (hasLegacyAdvance ? 'amount' : 'percentage'))
-  const [advanceDeductionValue, setAdvanceDeductionValue] = useState(payment?.advanceDeductionValue ? String(payment.advanceDeductionValue) : (hasLegacyAdvance ? String(payment.advanceDeduction) : ''))
-  const [advanceDeductionSources, setAdvanceDeductionSources] = useState(payment?.advanceDeductionSources ?? {
-    mainContract: hasLegacyAdvance,
-    coa: false
-  })
+  // Advance deduction settings - Load from payment
+  const [useAdvanceDeduction, setUseAdvanceDeduction] = useState(!!payment?.advanceDeduction)
+  const [advanceDeductionType, setAdvanceDeductionType] = useState(payment?.advanceDeductionType || 'percentage')
+  const [advanceDeductionValue, setAdvanceDeductionValue] = useState(payment?.advanceDeductionValue ? String(payment.advanceDeductionValue) : '')
+  const [advanceDeductionSources, setAdvanceDeductionSources] = useState(
+    payment?.advanceDeductionSources || { mainContract: false, coa: false }
+  )
 
-  // Retention reduce settings
-  const hasLegacyRetention = isLegacyRecord && (payment?.retentionReduce > 0);
-  const [useRetentionReduce, setUseRetentionReduce] = useState(!!payment?.retentionReduceValue || hasLegacyRetention)
-  const [retentionReduceType, setRetentionReduceType] = useState(payment?.retentionReduceType ?? (hasLegacyRetention ? 'amount' : 'percentage'))
-  const [retentionReduceValue, setRetentionReduceValue] = useState(payment?.retentionReduceValue ? String(payment.retentionReduceValue) : (hasLegacyRetention ? String(payment.retentionReduce) : ''))
+  // Retention reduce settings - Load from payment
+  const [useRetentionReduce, setUseRetentionReduce] = useState(!!payment?.retentionReduce)
+  const [retentionReduceType, setRetentionReduceType] = useState(payment?.retentionReduceType || 'percentage')
+  const [retentionReduceValue, setRetentionReduceValue] = useState(payment?.retentionReduceValue ? String(payment.retentionReduceValue) : '')
 
-  // Claim type state
-  const [claimMainContract, setClaimMainContract] = useState(payment?.claimMainContract ?? isLegacyRecord)
-  const [claimCOA, setClaimCOA] = useState(payment?.claimCOA ?? false)
+  // Claim type state - Load from payment
+  const [claimMainContract, setClaimMainContract] = useState(payment?.claimMainContract || false)
+  const [claimCOA, setClaimCOA] = useState(payment?.claimCOA || false)
   
-  // Main contract items state
+  // Main contract items state - Load from payment
   const [mainContractItems, setMainContractItems] = useState(
-    payment?.mainContractItems?.length ? 
-      payment.mainContractItems.map(item => ({...item, id: Date.now() + Math.random(), value: String(item.value)})) :
-      (isLegacyRecord ? [{ id: Date.now(), no: '1', description: payment.detail || 'Claim', value: String(payment.value) }] : [{ id: Date.now(), no: '1', description: '', value: '' }])
+    payment?.mainContractItems && payment.mainContractItems.length > 0
+      ? payment.mainContractItems.map((item, idx) => ({
+          id: Date.now() + idx,
+          no: item.no,
+          description: item.description,
+          value: String(item.value)
+        }))
+      : [{ id: Date.now(), no: '1', description: '', value: '' }]
   )
   
-  // COA items state - array of { coaId, items: [...] }
+  // COA items state - Load from payment
   const [coaItems, setCoaItems] = useState(
-    payment?.coaItems?.length ?
-      payment.coaItems.map(coa => ({
-        ...coa,
-        items: coa.items.map(item => ({...item, id: Date.now() + Math.random(), value: String(item.value)}))
-      })) : []
+    payment?.coaItems && payment.coaItems.length > 0
+      ? payment.coaItems.map((coaItem, idx) => ({
+          coaId: coaItem.coaId,
+          items: coaItem.items.map((item, itemIdx) => ({
+            id: Date.now() + idx * 1000 + itemIdx,
+            no: item.no,
+            description: item.description,
+            value: String(item.value)
+          }))
+        }))
+      : []
   )
 
   const set = (k, v) => {
@@ -299,13 +303,10 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
     }, 0)
   }
 
-  // Auto-generate payment number based on project
+  // Auto-generate payment number based on project - Disabled for edit mode
   const autoGenNo = () => {
-    const proj = projects.find(p => p.id === form.projectId)
-    if (!proj) return
-    const existing = payments.filter(p => p.projectId === form.projectId && p.type === 'main').length
-    const prefix = proj.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 3)
-    set('paymentNo', `PMT-${prefix}-${String(existing + 1).padStart(3, '0')}`)
+    // Disabled in edit mode
+    return
   }
 
   // Use grand total for calculations
@@ -380,7 +381,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
   }
 
   const handleSubmit = async () => {
-    if (!validate()) return
+    if (!validate() || !payment?.id) return
     setSaving(true)
     
     try {
@@ -405,10 +406,12 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
       const { grossClaim: finalGrossClaim, withTaxAmount: finalWithTaxAmount, balanceValue: finalBalance } = 
         calculatePaymentBalance(finalValue, 0, finalRet, finalWithTaxPercent)
       
+      const today = new Date().toISOString().split('T')[0]
+      
       // Prepare payment data
       const paymentData = {
         projectId:        form.projectId,
-        type:             claimMainContract ? 'main' : 'coa', // ถ้า claim main contract ให้เป็น main, ไม่งั้นเป็น coa
+        type:             claimMainContract ? 'main' : 'coa',
         paymentNo:        form.paymentNo,
         detail:           form.detail,
         value:            finalValue,
@@ -426,12 +429,10 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
         balanceValue:     finalBalance,
         attachment:       form.attachment,
         note:             form.note,
-        status:           'Pending PM', // Changed from 'In Progress' to 'Pending PM'
+        status:           'Pending PM', // Changed from 'In Progress' to 'Pending PM' when submitted
+        createdAt:        today, // Update submission date
         claimMainContract: claimMainContract,
         claimCOA:         claimCOA,
-        rejectedAt:       deleteField(),
-        rejectionNote:    deleteField(),
-        rejectedBy:       deleteField(),
       }
       
       // Add claim-specific data
@@ -459,8 +460,8 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
       }
       
       await updatePayment(payment.id, paymentData)
-      onSaved?.()
       setSaving(false)
+      onSaved?.()
       onClose()
     } catch (error) {
       console.error('Error updating payment:', error)
@@ -470,33 +471,24 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
   }
 
   return (
-    <Modal title="Edit Payment Claim" subtitle="แก้ไขแล้วส่งให้ PM อนุมัติอีกครั้ง (flow เริ่มใหม่)" onClose={onClose}>
+    <Modal title={`Edit Payment - ${payment?.paymentNo}`} subtitle="แก้ไขและ Submit ใหม่" onClose={onClose}>
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Project" required error={errors.projectId} className="sm:col-span-2">
-            <Select value={form.projectId} onChange={e => set('projectId', e.target.value)} error={errors.projectId}>
+            <Select value={form.projectId} onChange={e => set('projectId', e.target.value)} error={errors.projectId} disabled>
               <option value="">— Select project —</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </Select>
           </FormField>
 
           <FormField label="Payment No." required error={errors.paymentNo}>
-            <div className="flex gap-2">
-              <Input
-                placeholder="e.g. PMT-CPT-001"
-                value={form.paymentNo}
-                onChange={e => set('paymentNo', e.target.value)}
-                error={errors.paymentNo}
-                className="flex-1"
-              />
-              <button
-                type="button"
-                onClick={autoGenNo}
-                className="px-3 py-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 shrink-0 transition-colors"
-              >
-                Auto
-              </button>
-            </div>
+            <Input
+              placeholder="e.g. PMT-CPT-001"
+              value={form.paymentNo}
+              onChange={e => set('paymentNo', e.target.value)}
+              error={errors.paymentNo}
+              disabled
+            />
           </FormField>
 
           <FormField label="Attachment">
@@ -1093,7 +1085,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
       <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button variant="primary" icon={Save} loading={saving} onClick={handleSubmit}>
-          Save & Resubmit for Approval
+          Submit for Approval
         </Button>
       </div>
     </Modal>

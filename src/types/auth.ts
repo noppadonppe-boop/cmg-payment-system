@@ -1,6 +1,7 @@
 import type { Timestamp } from 'firebase/firestore'
 
 export const USER_ROLES = [
+  'MasterAdmin',
   'SuperAdmin',
   'Admin',
   'MD',

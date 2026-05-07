@@ -23,10 +23,21 @@ export default function ReceivedModal({ payment, onClose }) {
   const { updatePayment } = useData()
   const { currentUser } = useAuth()
 
+  // Map old status
+  let status = payment.status
+  if (status === 'Submitted') status = 'Invoice Submitted'
+  if (status === 'Invoice PM Approved') status = 'Invoice Submitted'
+  
+  // Determine which stage
+  const isConfirmingIncome = status === 'Invoice Submitted' // Stage 3.0: Confirm income
+  const isCompletingPayment = status === 'Income Confirm Pending' // Stage 3.1: Complete payment
+
   const [form, setForm] = useState({
     receivedDate: new Date().toISOString().split('T')[0],
     receivedAttachment: '',
     receivedNote: '',
+    incomeConfirmedDate: payment.incomeConfirmedDate || new Date().toISOString().split('T')[0],
+    incomeConfirmedAmount: payment.incomeConfirmedAmount || payment.balanceValue || '',
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
@@ -38,7 +49,8 @@ export default function ReceivedModal({ payment, onClose }) {
 
   const validate = () => {
     const errs = {}
-    if (!form.receivedDate) errs.receivedDate = 'Received date is required'
+    if (!form.receivedDate) errs.receivedDate = 'Date is required'
+    if (!form.incomeConfirmedAmount) errs.incomeConfirmedAmount = 'Amount is required'
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -47,22 +59,33 @@ export default function ReceivedModal({ payment, onClose }) {
     if (!validate()) return
     setSaving(true)
     await new Promise(r => setTimeout(r, 350))
-    updatePayment(payment.id, {
-      status:             'Received',
-      receivedDate:       form.receivedDate,
+    
+    const updates = {
+      receivedBy: currentUser.id,
+      receivedAt: new Date().toISOString().split('T')[0],
+      status: 'Completed',
+      incomeConfirmedDate: form.receivedDate,
+      incomeConfirmedAmount: parseCurrency(form.incomeConfirmedAmount),
+      incomeConfirmedBy: currentUser.id,
+      incomeConfirmedAt: new Date().toISOString().split('T')[0],
+      receivedDate: form.receivedDate,
       receivedAttachment: form.receivedAttachment,
-      receivedNote:       form.receivedNote,
-      receivedBy:         currentUser.id,
-      receivedAt:         new Date().toISOString().split('T')[0],
-    })
+      receivedNote: form.receivedNote
+    }
+    
+    updatePayment(payment.id, updates)
     setSaving(false)
     onClose()
+  }
+  
+  function parseCurrency(val) {
+    return parseFloat(String(val || '').replace(/,/g, '')) || 0
   }
 
   return (
     <Modal
-      title="Confirm Payment Received"
-      subtitle="Step 3 — AccCMG Payment Receipt Confirmation"
+      title="Complete Payment"
+      subtitle="Stage 3 — Final Payment Completion & Income Confirmation"
       onClose={onClose}
     >
       <div className="space-y-4">
@@ -102,53 +125,67 @@ export default function ReceivedModal({ payment, onClose }) {
         <div className="rounded-xl border border-slate-200 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600">
             <CheckCircle2 size={14} className="text-emerald-100" />
-            <span className="text-sm font-semibold text-white">Payment Receipt Details</span>
+            <span className="text-sm font-semibold text-white">
+              Payment Completion Details
+            </span>
           </div>
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Date Payment Received" required error={errors.receivedDate}>
-              <div className="relative">
-                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <Input
-                  type="date"
-                  value={form.receivedDate}
-                  onChange={e => set('receivedDate', e.target.value)}
-                  error={errors.receivedDate}
-                  className="pl-8"
-                />
-              </div>
-            </FormField>
+              <>
+                <FormField label="Date Received" required error={errors.receivedDate}>
+                  <div className="relative">
+                    <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      type="date"
+                      value={form.receivedDate}
+                      onChange={e => set('receivedDate', e.target.value)}
+                      error={errors.receivedDate}
+                      className="pl-8"
+                    />
+                  </div>
+                </FormField>
 
-            <FormField label="Receipt / Bank Slip Attachment">
-              <AttachmentField
-                value={form.receivedAttachment}
-                onChange={v => set('receivedAttachment', v)}
-                folder="payments"
-                docId={payment?.projectId}
-                uploadedBy={currentUser?.id}
-                placeholder="Filename or URL หรือกด Upload"
-              />
-            </FormField>
+                <FormField label="Amount Received (฿)" required error={errors.incomeConfirmedAmount}>
+                  <Input
+                    type="number"
+                    value={form.incomeConfirmedAmount}
+                    onChange={e => set('incomeConfirmedAmount', e.target.value)}
+                    error={errors.incomeConfirmedAmount}
+                    placeholder="0.00"
+                  />
+                </FormField>
 
-            <FormField label="Note" className="sm:col-span-2">
-              <Textarea
-                rows={2}
-                placeholder="e.g. Received via bank transfer, ref no..."
-                value={form.receivedNote}
-                onChange={e => set('receivedNote', e.target.value)}
-              />
-            </FormField>
+                <FormField label="Receipt / Bank Slip Attachment">
+                  <AttachmentField
+                    value={form.receivedAttachment}
+                    onChange={v => set('receivedAttachment', v)}
+                    folder="payments"
+                    docId={payment?.projectId}
+                    uploadedBy={currentUser?.id}
+                    placeholder="Filename or URL หรือกด Upload"
+                  />
+                </FormField>
+
+                <FormField label="Note" className="sm:col-span-2">
+                  <Textarea
+                    rows={2}
+                    placeholder="e.g. Received via bank transfer, ref no..."
+                    value={form.receivedNote}
+                    onChange={e => set('receivedNote', e.target.value)}
+                  />
+                </FormField>
+              </>
           </div>
         </div>
 
         <p className="text-xs text-slate-400 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
-          Confirming receipt will mark this payment as <strong>"Received"</strong> and complete the payment workflow. QsEng, PM, GM, and MD will be notified.
+          Completing this payment will mark it as Completed (Stage 4). QsENG, PM, GM, and MD will be notified.
         </p>
       </div>
 
       <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button variant="emerald" icon={CheckCircle2} loading={saving} onClick={handleSubmit}>
-          Confirm Payment Received
+          Complete Payment
         </Button>
       </div>
     </Modal>

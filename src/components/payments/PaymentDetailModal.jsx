@@ -43,6 +43,23 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
   const isQsEng  = can('canCreateClaims')
   const isAccCMG = can('canUpdateBonds')
 
+  // Map old statuses
+  let mappedStatus = payment.status
+  if (mappedStatus === 'In Progress') mappedStatus = 'Pending PM'
+  if (mappedStatus === 'Rejected') mappedStatus = 'PM Rejected'
+  if (mappedStatus === 'Submitted') mappedStatus = 'Invoice Submitted'
+  if (mappedStatus === 'Received') mappedStatus = 'Completed'
+  if (mappedStatus === 'Invoice PM Approved') mappedStatus = 'Invoice Submitted'
+
+  const currentStep =
+    mappedStatus === 'Completed' ? 4 :
+    mappedStatus === 'Invoice Submitted' ? 3 :
+    (mappedStatus === 'PM Approved' || mappedStatus === 'Invoice Draft' || mappedStatus === 'Invoice Pending PM' || mappedStatus === 'Invoice PM Rejected' || mappedStatus === 'Client Sign Pending') ? 2 :
+    1
+
+  const isRejected = mappedStatus === 'PM Rejected' || mappedStatus === 'Invoice PM Rejected'
+  const isDraft = mappedStatus === 'Draft' || mappedStatus === 'Invoice Draft'
+
   return (
     <Modal
       title={payment.paymentNo}
@@ -51,8 +68,21 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
       maxWidth="max-w-2xl"
     >
       <div className="space-y-5">
-        {/* Visual 3-Step Stepper */}
-        <WorkflowStepper payment={payment} USERS={USERS} />
+        {/* Visual 4-Step Stepper */}
+        <WorkflowStepper payment={payment} />
+
+        {/* Draft Notice */}
+        {payment.status === 'Draft' && (
+          <div className="flex items-start gap-2.5 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2.5">
+            <AlertCircle size={15} className="text-slate-500 shrink-0 mt-0.5" />
+            <div className="text-xs text-slate-700">
+              <p className="font-semibold">Draft - Pending Submission</p>
+              <p className="mt-1">
+                Payment นี้อยู่ในสถานะ Draft คุณสามารถแก้ไขและ Submit เพื่อส่งให้ PM อนุมัติได้
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Step 1: Claim Info */}
         <StepSection
@@ -76,6 +106,99 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
             )}
             {payment.note && <InfoRow label="Note" value={`"${payment.note}"`} />}
           </div>
+
+          {/* Claim Items Display - New Format */}
+          {payment.claimMainContract && payment.mainContractItems && payment.mainContractItems.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Main Contract Items</h4>
+              <div className="rounded-lg border border-slate-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-16">No.</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Description</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 w-32">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {payment.mainContractItems.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-3 py-2 text-slate-600 font-medium">{item.no}</td>
+                        <td className="px-3 py-2 text-slate-700">{item.description}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-slate-800">{fmtCurrency(item.value)}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-slate-50 font-semibold">
+                      <td colSpan="2" className="px-3 py-2 text-right text-slate-700">Total:</td>
+                      <td className="px-3 py-2 text-right text-blue-700">
+                        {fmtCurrency(payment.mainContractItems.reduce((sum, item) => sum + (item.value || 0), 0))}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {payment.claimCOA && payment.coaItems && payment.coaItems.length > 0 && (
+            <div className="mt-4 space-y-3">
+              <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide">COA Items</h4>
+              {payment.coaItems.map((coaItem, coaIdx) => (
+                <div key={coaIdx} className="border border-purple-200 rounded-lg overflow-hidden">
+                  <div className="bg-purple-600 px-3 py-2">
+                    <h5 className="text-sm font-semibold text-white">{coaItem.coaNo}</h5>
+                  </div>
+                  <div className="overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-16">No.</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Description</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 w-32">Value</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {coaItem.items.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50">
+                            <td className="px-3 py-2 text-slate-600 font-medium">{item.no}</td>
+                            <td className="px-3 py-2 text-slate-700">{item.description}</td>
+                            <td className="px-3 py-2 text-right font-semibold text-slate-800">{fmtCurrency(item.value)}</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-purple-50 font-semibold">
+                          <td colSpan="2" className="px-3 py-2 text-right text-slate-700">Total:</td>
+                          <td className="px-3 py-2 text-right text-purple-700">
+                            {fmtCurrency(coaItem.items.reduce((sum, item) => sum + (item.value || 0), 0))}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Legacy Data Display - For old payments without detailed items */}
+          {!payment.mainContractItems && !payment.coaItems && payment.value > 0 && (
+            <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertCircle size={14} className="text-slate-400 mt-0.5 shrink-0" />
+                <div className="text-xs text-slate-600">
+                  <p className="font-semibold">Legacy Payment Record</p>
+                  <p className="mt-1">This payment was created before the detailed items tracking feature. Only summary values are available.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Other Claim Display */}
+          {payment.otherClaim && payment.otherClaim > 0 && (
+            <div className="mt-4 flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <span className="text-sm font-semibold text-slate-700">Other Claim</span>
+              <span className="text-sm font-bold text-amber-700">{fmtCurrency(payment.otherClaim)}</span>
+            </div>
+          )}
 
           {/* Financial breakdown */}
           <div className="mt-4 rounded-lg border border-slate-200 overflow-hidden">
@@ -113,11 +236,40 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
             </div>
           )}
 
+          {/* Draft Edit Button */}
+          {isQsEng && payment.status === 'Draft' && (
+            <div className="mt-3">
+              <Button variant="primary" size="sm" onClick={() => onAction?.('editDraft')}>
+                Edit & Submit
+              </Button>
+            </div>
+          )}
+
           {isPM && payment.status === 'In Progress' && (
             <div className="mt-3">
               <Button variant="primary" size="sm" onClick={() => onAction?.('approve')}>
                 Review & Approve / Reject
               </Button>
+            </div>
+          )}
+          
+          {isPM && payment.revisionRequest && payment.revisionRequest.status === 'Pending' && (
+            <div className="mt-3 space-y-3">
+              <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+                <AlertCircle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-700">Revision Requested by QS on {fmtDate(payment.revisionRequest.requestedAt)}</p>
+                  {payment.revisionRequest.reason && <p className="text-xs text-amber-600 mt-0.5">Reason: "{payment.revisionRequest.reason}"</p>}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="primary" size="sm" onClick={() => onAction?.('approveRevision')}>
+                  Approve Revision
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => onAction?.('rejectRevision')}>
+                  Reject Request
+                </Button>
+              </div>
             </div>
           )}
         </StepSection>
@@ -127,10 +279,10 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
           step={2}
           title="Client Invoice"
           subtitle="Issued by QsEng after PM approval"
-          status={payment.status}
-          activeStep={payment.status === 'Submitted' || payment.status === 'Received' ? 2 : null}
+          status={mappedStatus}
+          activeStep={currentStep >= 2 ? 2 : null}
           color="blue"
-          locked={payment.status === 'In Progress' || payment.status === 'Rejected'}
+          locked={currentStep < 2}
         >
           {payment.invoiceNo ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
@@ -147,11 +299,28 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
             </p>
           )}
 
-          {isQsEng && payment.status === 'Submitted' && !payment.invoiceNo && (
-            <div className="mt-3">
-              <Button variant="primary" size="sm" icon={Send} onClick={() => onAction?.('invoice')}>
-                Issue Invoice
+          {isQsEng && payment.status === 'Submitted' && !payment.revisionRequest && (
+            <div className="mt-3 flex gap-2">
+              {!payment.invoiceNo && (
+                <Button variant="primary" size="sm" icon={Send} onClick={() => onAction?.('invoice')}>
+                  Issue Invoice
+                </Button>
+              )}
+              <Button variant="secondary" size="sm" onClick={() => onAction?.('requestRevision')}>
+                Request Revision
               </Button>
+            </div>
+          )}
+          
+          {isQsEng && payment.status === 'Submitted' && payment.revisionRequest && payment.revisionRequest.status === 'Pending' && (
+            <div className="mt-3">
+              <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
+                <AlertCircle size={15} className="text-blue-500 shrink-0 mt-0.5" />
+                <div className="text-xs text-blue-700">
+                  <p className="font-semibold">Revision Request Pending</p>
+                  <p className="mt-1">รอ PM อนุมัติคำขอแก้ไข</p>
+                </div>
+              </div>
             </div>
           )}
         </StepSection>
@@ -161,10 +330,10 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
           step={3}
           title="Payment Received"
           subtitle="Confirmed by AccCMG"
-          status={payment.status}
-          activeStep={payment.status === 'Received' ? 3 : null}
+          status={mappedStatus}
+          activeStep={currentStep >= 3 ? 3 : null}
           color="emerald"
-          locked={payment.status !== 'Received' && !(isAccCMG && payment.status === 'Submitted' && payment.invoiceNo)}
+          locked={currentStep < 3}
         >
           {payment.receivedDate ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
@@ -205,92 +374,143 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
 }
 
 /* ─── Visual Workflow Stepper ─────────────────────────────────────────────── */
-function WorkflowStepper({ payment, USERS }) {
-  const currentStep =
-    payment.status === 'Received'    ? 3 :
-    payment.status === 'Submitted'   ? 2 :
-    payment.status === 'In Progress' ? 1 : 1
-  const isRejected = payment.status === 'Rejected'
-
+function WorkflowStepper({ payment }) {
+  let mappedStatus = payment.status
+  if (mappedStatus === 'In Progress') mappedStatus = 'Pending PM'
+  if (mappedStatus === 'Rejected') mappedStatus = 'PM Rejected'
+  if (mappedStatus === 'Submitted') mappedStatus = 'Invoice Submitted'
+  if (mappedStatus === 'Received') mappedStatus = 'Completed'
+  if (mappedStatus === 'Invoice PM Approved') mappedStatus = 'Invoice Submitted'
+  
+  // Define main steps with sub-steps
   const steps = [
-    {
-      num: 1,
-      label: 'Internal Approval',
-      sublabel: 'QsEng submits → PM reviews',
-      icon: Clock,
-      doneIcon: CheckCircle2,
-      statusLabel: isRejected ? 'Rejected' : currentStep > 1 ? 'Approved' : 'In Progress',
-      statusVariant: isRejected ? 'rose' : currentStep > 1 ? 'emerald' : 'amber',
+    { 
+      key: 'step1', 
+      label: 'Payment',
+      subSteps: [
+        { key: 'sub1', label: 'PM review', statuses: ['Pending PM', 'PM Rejected'] }
+      ]
     },
-    {
-      num: 2,
-      label: 'Invoice Sent',
-      sublabel: 'QsEng issues invoice to client',
-      icon: Send,
-      doneIcon: CheckCircle2,
-      statusLabel: currentStep > 2 ? 'Sent' : currentStep === 2 ? 'Waiting Pay' : 'Pending',
-      statusVariant: currentStep > 2 ? 'emerald' : currentStep === 2 ? 'blue' : 'slate',
+    { 
+      key: 'step2', 
+      label: 'Invoice',
+      subSteps: [
+        { key: 'sub2', label: 'PM review', statuses: ['Invoice Pending PM', 'Invoice PM Rejected'] },
+        { key: 'sub3', label: 'Client Sign', statuses: ['Client Sign Pending'] }
+      ]
     },
-    {
-      num: 3,
-      label: 'Payment Received',
-      sublabel: 'AccCMG confirms receipt',
-      icon: Banknote,
-      doneIcon: CheckCircle2,
-      statusLabel: currentStep === 3 ? 'Received' : 'Pending',
-      statusVariant: currentStep === 3 ? 'emerald' : 'slate',
+    { 
+      key: 'step3', 
+      label: 'Receive',
+      subSteps: []
+    },
+    { 
+      key: 'step4', 
+      label: 'Complete',
+      subSteps: []
     },
   ]
 
+  // Determine current step and sub-step
+  const getCurrentStep = () => {
+    if (mappedStatus === 'Completed') return { step: 4, subStep: null }
+    if (mappedStatus === 'Invoice Submitted') return { step: 3, subStep: 0 }
+    if (mappedStatus === 'PM Approved' || mappedStatus === 'Invoice Draft' || 
+        mappedStatus === 'Invoice Pending PM' || mappedStatus === 'Invoice PM Rejected' || 
+        mappedStatus === 'Client Sign Pending') {
+      if (mappedStatus === 'Invoice Pending PM' || mappedStatus === 'Invoice PM Rejected') return { step: 2, subStep: 1 }
+      if (mappedStatus === 'Client Sign Pending') return { step: 2, subStep: 2 }
+      return { step: 2, subStep: 0 }
+    }
+    if (mappedStatus === 'Pending PM' || mappedStatus === 'PM Rejected') return { step: 1, subStep: 1 }
+    if (mappedStatus === 'Draft') return { step: 1, subStep: 0 }
+    return { step: 1, subStep: 0 }
+  }
+
+  const { step: currentStep, subStep: currentSubStep } = getCurrentStep()
+  const isRejected = mappedStatus === 'PM Rejected' || mappedStatus === 'Invoice PM Rejected'
+
   return (
-    <div className="bg-slate-50 rounded-xl border border-slate-200 p-4">
-      <div className="flex items-start justify-between gap-2">
-        {steps.map((step, i) => {
-          const done   = currentStep > step.num
-          const active = currentStep === step.num
-          const Icon   = done ? step.doneIcon : step.icon
-          const rejected = active && isRejected
+    <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 sm:p-5 flex justify-center overflow-x-auto">
+      <div className="flex items-center gap-1 sm:gap-2 min-w-max pb-1">
+        {steps.map((step, stepIndex) => {
+          const stepNum = stepIndex + 1
+          const done = currentStep > stepNum
+          const active = currentStep === stepNum
+          const pending = currentStep < stepNum
 
           return (
-            <div key={step.num} className="flex items-start gap-0 flex-1">
-              {/* Step node */}
-              <div className="flex flex-col items-center flex-1">
+            <div key={step.key} className="flex items-center gap-1 sm:gap-2">
+              {/* Main Step Circle */}
+              <div className="flex flex-col items-center gap-1.5">
                 <div className={clsx(
-                  'w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all',
-                  done     && 'bg-emerald-500 border-emerald-500',
-                  active && !rejected && 'bg-blue-600 border-blue-600',
-                  rejected && 'bg-rose-500 border-rose-500',
-                  !done && !active && 'bg-white border-slate-300',
+                  'w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold border-2 transition-all',
+                  done && 'bg-emerald-500 border-emerald-500 text-white',
+                  active && !isRejected && 'bg-blue-600 border-blue-600 text-white',
+                  active && isRejected && 'bg-rose-500 border-rose-500 text-white',
+                  pending && 'bg-white border-slate-300 text-slate-400',
                 )}>
-                  <Icon size={18} className={clsx(
-                    done || active ? 'text-white' : 'text-slate-400'
-                  )} />
+                  {done ? <CheckCircle2 size={18} /> : stepNum}
                 </div>
-                <div className="mt-2 text-center">
-                  <p className={clsx(
-                    'text-xs font-semibold',
-                    done     && 'text-emerald-700',
-                    active && !rejected && 'text-blue-700',
-                    rejected && 'text-rose-600',
-                    !done && !active && 'text-slate-400',
-                  )}>
-                    {step.label}
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5 hidden sm:block">{step.sublabel}</p>
-                  <Badge variant={step.statusVariant} className="mt-1.5 text-[9px]">
-                    {rejected && step.num === 1 ? 'Rejected' : step.statusLabel}
-                  </Badge>
-                </div>
+                <span className={clsx(
+                  'text-[10px] sm:text-xs font-semibold whitespace-nowrap',
+                  done && 'text-emerald-700',
+                  active && !isRejected && 'text-blue-700',
+                  active && isRejected && 'text-rose-600',
+                  pending && 'text-slate-500',
+                )}>
+                  {step.label}
+                </span>
               </div>
 
-              {/* Connector */}
-              {i < steps.length - 1 && (
-                <div className="flex items-center mt-5 shrink-0 w-8">
-                  <div className={clsx(
-                    'w-full h-0.5 transition-all',
-                    currentStep > step.num ? 'bg-emerald-400' : 'bg-slate-200'
-                  )} />
-                </div>
+              {/* Sub-steps */}
+              {step.subSteps.length > 0 && stepIndex < steps.length - 1 && (
+                <>
+                  {step.subSteps.map((subStep, subIndex) => {
+                    const subNum = subIndex + 1
+                    const subDone = done || (active && currentSubStep !== null && currentSubStep > subNum)
+                    const subActive = active && currentSubStep === subNum
+                    const subPending = pending || (active && currentSubStep !== null && currentSubStep < subNum)
+
+                    return (
+                      <div key={subStep.key} className="flex items-center gap-1 sm:gap-2">
+                        {/* Connector line before sub-step */}
+                        <div className={clsx(
+                          'w-4 sm:w-6 h-0.5 mb-5 transition-all',
+                          (done || subDone) ? 'bg-emerald-400' : 'bg-slate-200'
+                        )} />
+                        
+                        {/* Sub-step dot */}
+                        <div className="flex flex-col items-center gap-1.5">
+                          <div className={clsx(
+                            'w-3 h-3 sm:w-4 sm:h-4 rounded-full border-2 transition-all',
+                            (done || subDone) && 'bg-emerald-400 border-emerald-400',
+                            subActive && !isRejected && 'bg-blue-500 border-blue-500',
+                            subActive && isRejected && 'bg-rose-400 border-rose-400',
+                            subPending && 'bg-white border-slate-200',
+                          )} />
+                          <span className={clsx(
+                            'text-[9px] sm:text-[10px] font-medium whitespace-nowrap',
+                            (done || subDone) && 'text-emerald-600',
+                            subActive && !isRejected && 'text-blue-600',
+                            subActive && isRejected && 'text-rose-500',
+                            subPending && 'text-slate-400',
+                          )}>
+                            {subStep.label}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+
+              {/* Connector line to next main step */}
+              {stepIndex < steps.length - 1 && (
+                <div className={clsx(
+                  'w-4 sm:w-6 h-0.5 mb-5 transition-all',
+                  done ? 'bg-emerald-400' : 'bg-slate-200'
+                )} />
               )}
             </div>
           )

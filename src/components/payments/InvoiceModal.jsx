@@ -3,6 +3,7 @@ import { Send, Hash, Calendar, Paperclip, FileText, Calculator } from 'lucide-re
 import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { FormField, Input, Textarea } from '../ui/FormField'
+import { AttachmentField } from '../ui/AttachmentField'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
 import { Modal } from './PaymentCreateModal'
@@ -17,10 +18,21 @@ export default function InvoiceModal({ payment, onClose }) {
   const { updatePayment } = useData()
   const { currentUser } = useAuth()
 
+  // Map old status
+  let status = payment.status
+  if (status === 'Submitted') status = 'PM Approved'
+  
+  // Determine which stage we're in
+  const isCreatingInvoice = status === 'PM Approved' // Creating invoice draft
+  const isSubmittingInvoice = status === 'Invoice Draft' // Submitting invoice for PM review
+  const isResubmittingInvoice = status === 'Invoice PM Rejected' // Resubmitting after PM rejection
+  const isUploadingSignedDoc = status === 'Client Sign Pending' // Uploading signed document
+
   const [form, setForm] = useState({
-    invoiceNo: '',
-    invoiceDueDate: '',
-    invoiceNote: '',
+    invoiceNo: payment.invoiceNo || '',
+    invoiceDueDate: payment.invoiceDueDate || '',
+    invoiceNote: payment.invoiceNote || '',
+    clientSignedDoc: payment.clientSignedDoc || '',
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
@@ -34,6 +46,12 @@ export default function InvoiceModal({ payment, onClose }) {
     const errs = {}
     if (!form.invoiceNo.trim())    errs.invoiceNo    = 'Invoice number is required'
     if (!form.invoiceDueDate)      errs.invoiceDueDate = 'Payment due date is required'
+    
+    // If uploading signed document, require the file
+    if (isUploadingSignedDoc && !form.clientSignedDoc.trim()) {
+      errs.clientSignedDoc = 'Client signed document is required'
+    }
+    
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -42,21 +60,53 @@ export default function InvoiceModal({ payment, onClose }) {
     if (!validate()) return
     setSaving(true)
     await new Promise(r => setTimeout(r, 350))
-    updatePayment(payment.id, {
+    
+    const updates = {
       invoiceNo:          form.invoiceNo,
       invoiceDueDate:     form.invoiceDueDate,
       invoiceNote:        form.invoiceNote,
-      invoiceSubmittedAt: new Date().toISOString().split('T')[0],
       invoiceIssuedBy:    currentUser.id,
-    })
+    }
+    
+    if (isCreatingInvoice) {
+      // Stage 2.0: Create invoice draft
+      updates.status = 'Invoice Draft'
+      updates.invoiceCreatedAt = new Date().toISOString().split('T')[0]
+    } else if (isSubmittingInvoice || isResubmittingInvoice) {
+      // Stage 2.1: Submit invoice for PM review
+      updates.status = 'Invoice Pending PM'
+      updates.invoiceSubmittedAt = new Date().toISOString().split('T')[0]
+      // Clear rejection data if resubmitting
+      if (isResubmittingInvoice) {
+        updates.invoiceRejectedBy = null
+        updates.invoiceRejectedAt = null
+        updates.invoiceRejectionNote = null
+      }
+    } else if (isUploadingSignedDoc) {
+      // Stage 2.2: Upload signed document and submit to AccCMG
+      updates.status = 'Invoice Submitted'
+      updates.clientSignedDoc = form.clientSignedDoc
+      updates.clientSignedAt = new Date().toISOString().split('T')[0]
+    }
+    
+    updatePayment(payment.id, updates)
     setSaving(false)
     onClose()
   }
 
   return (
     <Modal
-      title="Issue Client Invoice"
-      subtitle="Step 2 — Official Invoice Submission to Client"
+      title={
+        isUploadingSignedDoc ? "Upload Signed Invoice" :
+        isSubmittingInvoice ? "Submit Invoice for PM Review" :
+        isResubmittingInvoice ? "Resubmit Invoice" :
+        "Create Invoice"
+      }
+      subtitle={
+        isUploadingSignedDoc ? "Stage 2.2 — Upload Client Signed Document" :
+        isSubmittingInvoice || isResubmittingInvoice ? "Stage 2.1 — Submit for PM Review" :
+        "Stage 2.0 — Create Invoice Draft"
+      }
       onClose={onClose}
     >
       <div className="space-y-4">
@@ -129,18 +179,40 @@ export default function InvoiceModal({ payment, onClose }) {
                 onChange={e => set('invoiceNote', e.target.value)}
               />
             </FormField>
+            
+            {/* Client Signed Document - only show when uploading */}
+            {isUploadingSignedDoc && (
+              <FormField label="Client Signed Document" required error={errors.clientSignedDoc} className="sm:col-span-2">
+                <AttachmentField
+                  value={form.clientSignedDoc}
+                  onChange={v => set('clientSignedDoc', v)}
+                  folder="invoices"
+                  docId={payment.projectId}
+                  uploadedBy={currentUser?.id}
+                  placeholder="Upload signed invoice from client"
+                />
+              </FormField>
+            )}
           </div>
         </div>
 
         <p className="text-xs text-slate-400 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100">
-          Submitting this invoice will update the payment status to <strong>"Submitted / Waiting Pay"</strong> and notify PM, AccCMG, GM, and MD.
+          {isUploadingSignedDoc 
+            ? 'Uploading the signed document will submit the invoice to AccCMG for income confirmation (Stage 3).'
+            : isSubmittingInvoice || isResubmittingInvoice
+            ? 'Submitting this invoice will send it to PM for review and approval (Stage 2.1).'
+            : 'Creating this invoice will save it as draft. You can submit it for PM review later (Stage 2.0).'
+          }
         </p>
       </div>
 
       <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button variant="primary" icon={Send} loading={saving} onClick={handleSubmit}>
-          Issue Invoice
+          {isUploadingSignedDoc ? 'Upload & Submit to AccCMG' :
+           isSubmittingInvoice ? 'Submit for PM Review' :
+           isResubmittingInvoice ? 'Resubmit Invoice' :
+           'Save Draft'}
         </Button>
       </div>
     </Modal>

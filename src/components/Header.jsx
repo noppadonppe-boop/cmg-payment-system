@@ -9,15 +9,16 @@ import EditPhoneModal from './EditPhoneModal'
 export { ROLE_PERMISSIONS }
 
 const ROLE_BADGE_COLORS = {
-  SuperAdmin: 'bg-purple-100 text-purple-700',
-  Admin:      'bg-indigo-100 text-indigo-700',
-  MD:         'bg-purple-100 text-purple-700',
-  GM:         'bg-indigo-100 text-indigo-700',
-  CD:         'bg-blue-100 text-blue-700',
-  PM:         'bg-emerald-100 text-emerald-700',
-  CM:         'bg-teal-100 text-teal-700',
-  QsEng:      'bg-amber-100 text-amber-700',
-  AccCMG:     'bg-rose-100 text-rose-700',
+  MasterAdmin: 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-800 font-bold',
+  SuperAdmin:  'bg-purple-100 text-purple-700',
+  Admin:       'bg-indigo-100 text-indigo-700',
+  MD:          'bg-purple-100 text-purple-700',
+  GM:          'bg-indigo-100 text-indigo-700',
+  CD:          'bg-blue-100 text-blue-700',
+  PM:          'bg-emerald-100 text-emerald-700',
+  CM:          'bg-teal-100 text-teal-700',
+  QsEng:       'bg-amber-100 text-amber-700',
+  AccCMG:      'bg-rose-100 text-rose-700',
 }
 
 const PAGE_TITLES = {
@@ -50,6 +51,7 @@ export default function Header() {
   const badgeColor  = ROLE_BADGE_COLORS[primaryRole] ?? 'bg-slate-100 text-slate-600'
   const avatarText  = currentUser?.avatar ?? '?'
   const displayName = currentUser?.name ?? userProfile?.email ?? '—'
+  const photoURL    = userProfile?.photoURL
 
   async function handleLogout() {
     setOpen(false)
@@ -87,7 +89,7 @@ export default function Header() {
         )}
 
         {/* Admin shortcut */}
-        {userProfile?.role?.some((r) => ['SuperAdmin', 'Admin'].includes(r)) && (
+        {userProfile?.role?.some((r) => ['MasterAdmin', 'SuperAdmin', 'Admin'].includes(r)) && (
           <button
             onClick={() => navigate('/admin')}
             title="User Management"
@@ -103,7 +105,22 @@ export default function Header() {
             onClick={() => setOpen((o) => !o)}
             className="flex items-center gap-3 pl-3 pr-2.5 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-all text-sm"
           >
-            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold shrink-0">
+            {photoURL ? (
+              <img
+                src={photoURL}
+                alt={displayName}
+                className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200"
+                onError={(e) => {
+                  // Fallback to initials if image fails to load
+                  e.currentTarget.style.display = 'none'
+                  e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                }}
+              />
+            ) : null}
+            <div className={clsx(
+              'flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold shrink-0',
+              photoURL && 'hidden'
+            )}>
               {avatarText}
             </div>
             <div className="text-left hidden sm:block">
@@ -121,13 +138,35 @@ export default function Header() {
             <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl border border-slate-200 shadow-xl z-50 overflow-hidden">
               {/* User info */}
               <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
-                <p className="text-sm font-semibold text-slate-800">{displayName}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{userProfile?.email}</p>
+                <div className="flex items-center gap-3 mb-2">
+                  {photoURL ? (
+                    <img
+                      src={photoURL}
+                      alt={displayName}
+                      className="w-12 h-12 rounded-full object-cover shrink-0 border-2 border-white shadow-sm"
+                      onError={(e) => {
+                        // Fallback to initials if image fails to load
+                        e.currentTarget.style.display = 'none'
+                        e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                      }}
+                    />
+                  ) : null}
+                  <div className={clsx(
+                    'flex items-center justify-center w-12 h-12 rounded-full bg-blue-600 text-white text-sm font-bold shrink-0 shadow-sm',
+                    photoURL && 'hidden'
+                  )}>
+                    {avatarText}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{displayName}</p>
+                    <p className="text-xs text-slate-500 truncate">{userProfile?.email}</p>
+                  </div>
+                </div>
                 {userProfile?.position && (
-                  <p className="text-xs text-slate-400 mt-0.5">{userProfile.position}</p>
+                  <p className="text-xs text-slate-400 mb-2">{userProfile.position}</p>
                 )}
                 {/* All roles */}
-                <div className="flex flex-wrap gap-1 mt-2">
+                <div className="flex flex-wrap gap-1">
                   {(userProfile?.role ?? [primaryRole]).map((r) => (
                     <span
                       key={r}

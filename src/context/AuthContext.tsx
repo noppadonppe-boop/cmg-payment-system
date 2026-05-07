@@ -16,15 +16,16 @@ import type { UserProfile, UserRole, RolePermissions, LegacyUser } from '../type
 
 // ─── Role → permission map ────────────────────────────────────────────────────
 export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
-  SuperAdmin: { canManageProjects: true,  canApprovePayments: true,  canConvertCOR: true,  canUpdateBonds: true,  canCreateClaims: true,  globalView: true  },
-  Admin:      { canManageProjects: true,  canApprovePayments: true,  canConvertCOR: true,  canUpdateBonds: true,  canCreateClaims: true,  globalView: true  },
-  MD:         { canManageProjects: true,  canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: false, globalView: true  },
-  GM:         { canManageProjects: true,  canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: false, globalView: true  },
-  CD:         { canManageProjects: true,  canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: false, globalView: true  },
-  PM:         { canManageProjects: true,  canApprovePayments: true,  canConvertCOR: true,  canUpdateBonds: false, canCreateClaims: false, globalView: false },
-  CM:         { canManageProjects: false, canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: false, globalView: false },
-  QsEng:      { canManageProjects: false, canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: true,  globalView: false },
-  AccCMG:     { canManageProjects: false, canApprovePayments: false, canConvertCOR: false, canUpdateBonds: true,  canCreateClaims: false, globalView: true  },
+  MasterAdmin: { canManageProjects: true,  canApprovePayments: true,  canConvertCOR: true,  canUpdateBonds: true,  canCreateClaims: true,  globalView: true  },
+  SuperAdmin:  { canManageProjects: true,  canApprovePayments: true,  canConvertCOR: true,  canUpdateBonds: true,  canCreateClaims: true,  globalView: true  },
+  Admin:       { canManageProjects: true,  canApprovePayments: true,  canConvertCOR: true,  canUpdateBonds: true,  canCreateClaims: true,  globalView: true  },
+  MD:          { canManageProjects: true,  canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: false, globalView: true  },
+  GM:          { canManageProjects: true,  canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: false, globalView: true  },
+  CD:          { canManageProjects: true,  canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: false, globalView: true  },
+  PM:          { canManageProjects: true,  canApprovePayments: true,  canConvertCOR: true,  canUpdateBonds: false, canCreateClaims: false, globalView: false },
+  CM:          { canManageProjects: false, canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: false, globalView: false },
+  QsEng:       { canManageProjects: false, canApprovePayments: false, canConvertCOR: false, canUpdateBonds: false, canCreateClaims: true,  globalView: false },
+  AccCMG:      { canManageProjects: false, canApprovePayments: false, canConvertCOR: false, canUpdateBonds: true,  canCreateClaims: false, globalView: true  },
 }
 
 /** Merge permissions from all roles (OR logic) */
@@ -238,6 +239,7 @@ export function useAuth() {
 
 // Legacy named exports kept for backward compat with Header.jsx imports
 export const ROLES = {
+  MasterAdmin: 'MasterAdmin',
   SuperAdmin: 'SuperAdmin',
   Admin: 'Admin',
   MD: 'MD',

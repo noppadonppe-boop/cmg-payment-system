@@ -245,27 +245,27 @@ export default function BondStatusPage() {
             <Card key={bs.id} padding={false} className="overflow-hidden">
               {/* Project Header Row */}
               <div
-                className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-slate-50 transition-colors select-none"
+                className="flex items-center gap-3 px-3 py-2 sm:px-4 sm:py-2.5 cursor-pointer hover:bg-slate-50 transition-colors select-none"
                 onClick={() => toggleExpand(bs.projectId)}
               >
-                <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-blue-600 shrink-0">
-                  <Building2 size={16} className="text-white" />
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-600 shrink-0">
+                  <Building2 size={14} className="text-white" />
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 space-y-0.5">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold text-slate-800 truncate">{project.name}</p>
+                    <p className="text-[13px] font-bold text-slate-800 truncate max-w-[200px] sm:max-w-xs xl:max-w-md">{project.name}</p>
                     {isSaved && (
-                      <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
-                        <Check size={12} /> Saved
+                      <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-medium">
+                        <Check size={10} /> Saved
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                    <span className="flex items-center gap-1 text-xs text-slate-400">
+                  <div className="flex items-center gap-2 text-[11px] text-slate-500 flex-wrap">
+                    <span className="flex items-center gap-1 whitespace-nowrap">
                       <MapPin size={10} /> {project.location}
                     </span>
-                    <span className="text-xs text-slate-300">·</span>
-                    <span className="text-xs text-slate-400">{project.contractNo}</span>
+                    <span className="text-slate-200">|</span>
+                    <span className="text-slate-400 whitespace-nowrap">{project.contractNo}</span>
                   </div>
                 </div>
 
@@ -288,7 +288,7 @@ export default function BondStatusPage() {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 ml-2">
-                  <Badge variant={allDone ? 'emerald' : anyPending ? 'amber' : 'slate'}>
+                  <Badge variant={allDone ? 'emerald' : anyPending ? 'amber' : 'slate'} className="scale-90">
                     {allDone ? 'Complete' : anyPending ? 'Pending' : 'N/A'}
                   </Badge>
                   {isExpanded ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}

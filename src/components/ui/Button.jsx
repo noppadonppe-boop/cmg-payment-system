@@ -4,6 +4,7 @@ const VARIANTS = {
   primary:   'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 shadow-sm',
   secondary: 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300',
   danger:    'bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800 shadow-sm',
+  rose:      'bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800 shadow-sm',
   ghost:     'text-slate-600 hover:bg-slate-100 hover:text-slate-800',
   emerald:   'bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 shadow-sm',
   amber:     'bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 shadow-sm',

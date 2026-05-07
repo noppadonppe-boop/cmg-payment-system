@@ -45,14 +45,27 @@ export default function PaymentCreateModal({ projects, onClose }) {
     paymentNo: '',
     detail: '',
     value: '',
-    advanceDeduction: '',
-    retentionReduce: '',
     withTaxPercent: '',
     attachment: '',
     note: '',
+    otherClaim: '', // Other Claim amount
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+
+  // Advance deduction settings
+  const [useAdvanceDeduction, setUseAdvanceDeduction] = useState(false)
+  const [advanceDeductionType, setAdvanceDeductionType] = useState('percentage') // 'amount' or 'percentage'
+  const [advanceDeductionValue, setAdvanceDeductionValue] = useState('')
+  const [advanceDeductionSources, setAdvanceDeductionSources] = useState({
+    mainContract: false,
+    coa: false
+  })
+
+  // Retention reduce settings
+  const [useRetentionReduce, setUseRetentionReduce] = useState(false)
+  const [retentionReduceType, setRetentionReduceType] = useState('percentage') // 'amount' or 'percentage'
+  const [retentionReduceValue, setRetentionReduceValue] = useState('')
 
   // Claim type state
   const [claimMainContract, setClaimMainContract] = useState(false)
@@ -129,6 +142,76 @@ export default function PaymentCreateModal({ projects, onClose }) {
     }, 0)
   }
 
+  // Calculate total from all COA items
+  const calculateAllCOATotal = () => {
+    return coaItems.reduce((sum, coaItem) => {
+      return sum + calculateCOATotal(coaItem.coaId)
+    }, 0)
+  }
+
+  // Calculate grand total from all sources
+  const calculateGrandTotal = () => {
+    let total = 0
+    
+    if (claimMainContract) {
+      total += calculateMainContractTotal()
+    }
+    
+    if (claimCOA) {
+      total += calculateAllCOATotal()
+    }
+    
+    // Add Other Claim
+    total += parseCurrency(form.otherClaim)
+    
+    return total
+  }
+
+  // Calculate base value for advance deduction
+  const getAdvanceDeductionBase = () => {
+    let base = 0
+    if (advanceDeductionSources.mainContract && claimMainContract) {
+      base += calculateMainContractTotal()
+    }
+    if (advanceDeductionSources.coa && claimCOA) {
+      base += calculateAllCOATotal()
+    }
+    return base
+  }
+
+  // Calculate base value for retention reduce
+  const getRetentionReduceBase = () => {
+    // Retention Reduce คำนวณจาก Total Claim Value (หลังหัก Advance)
+    return grandTotal - calculateAdvanceDeduction()
+  }
+
+  // Calculate advance deduction amount
+  const calculateAdvanceDeduction = () => {
+    if (!useAdvanceDeduction || !advanceDeductionValue) return 0
+    
+    const base = getAdvanceDeductionBase()
+    const value = parseCurrency(advanceDeductionValue)
+    
+    if (advanceDeductionType === 'percentage') {
+      return (base * value) / 100
+    }
+    return value
+  }
+
+  // Calculate retention reduce amount
+  const calculateRetentionReduce = () => {
+    if (!useRetentionReduce || !retentionReduceValue) return 0
+    
+    // คำนวณจาก Total Claim Value (หลังหัก Advance)
+    const base = getRetentionReduceBase()
+    const value = parseCurrency(retentionReduceValue)
+    
+    if (retentionReduceType === 'percentage') {
+      return (base * value) / 100
+    }
+    return value
+  }
+
   // Add COA selection
   const addCOASelection = (coaId) => {
     if (!coaId || coaItems.some(item => item.coaId === coaId)) return
@@ -202,23 +285,6 @@ export default function PaymentCreateModal({ projects, onClose }) {
     }, 0)
   }
 
-  // Calculate grand total from all sources
-  const calculateGrandTotal = () => {
-    let total = 0
-    
-    if (claimMainContract) {
-      total += calculateMainContractTotal()
-    }
-    
-    if (claimCOA) {
-      coaItems.forEach(coaItem => {
-        total += calculateCOATotal(coaItem.coaId)
-      })
-    }
-    
-    return total
-  }
-
   // Auto-generate payment number based on project
   const autoGenNo = () => {
     const proj = projects.find(p => p.id === form.projectId)
@@ -230,11 +296,16 @@ export default function PaymentCreateModal({ projects, onClose }) {
 
   // Use grand total for calculations
   const grandTotal = calculateGrandTotal()
-  const value = grandTotal
-  const adv   = parseCurrency(form.advanceDeduction)
-  const ret   = parseCurrency(form.retentionReduce)
+  const adv = calculateAdvanceDeduction()
+  const totalClaimValue = grandTotal - adv // Total Claim Value หลังหัก Advance
+  
+  const ret = calculateRetentionReduce()
   const withTaxPercent = parseCurrency(form.withTaxPercent)
-  const { grossClaim, withTaxAmount, balanceValue: balance } = calculatePaymentBalance(value, adv, ret, withTaxPercent)
+  
+  // Calculate balance: (Total Claim Value × 1.07) - Retention - With Tax
+  // Note: ส่ง totalClaimValue ไปให้ calculatePaymentBalance แทน grandTotal
+  // และส่ง advanceDeduction = 0 เพราะหักไปแล้ว
+  const { grossClaim, withTaxAmount, balanceValue: balance } = calculatePaymentBalance(totalClaimValue, 0, ret, withTaxPercent)
 
   const validate = () => {
     const errs = {}
@@ -297,74 +368,97 @@ export default function PaymentCreateModal({ projects, onClose }) {
   const handleSubmit = async () => {
     if (!validate()) return
     setSaving(true)
-    await new Promise(r => setTimeout(r, 350))
     
-    // Calculate grand total
-    const grandTotal = calculateGrandTotal()
-    
-    // Recalculate financial values based on grand total
-    const finalValue = grandTotal
-    const finalAdv = parseCurrency(form.advanceDeduction)
-    const finalRet = parseCurrency(form.retentionReduce)
-    const finalWithTaxPercent = parseCurrency(form.withTaxPercent)
-    const { grossClaim: finalGrossClaim, withTaxAmount: finalWithTaxAmount, balanceValue: finalBalance } = 
-      calculatePaymentBalance(finalValue, finalAdv, finalRet, finalWithTaxPercent)
-    
-    // Prepare payment data
-    const paymentData = {
-      projectId:        form.projectId,
-      type:             claimCOA ? 'coa' : 'main',
-      paymentNo:        form.paymentNo,
-      detail:           form.detail,
-      value:            finalValue,
-      advanceDeduction: finalAdv,
-      retentionReduce:  finalRet,
-      withTaxPercent:   finalWithTaxPercent,
-      withTaxValue:     finalWithTaxAmount,
-      grossClaimValue:  finalGrossClaim,
-      balanceValue:     finalBalance,
-      attachment:       form.attachment,
-      note:             form.note,
-      status:           'In Progress',
-      createdBy:        currentUser.id,
-      invoiceNo:        null, 
-      invoiceDueDate:   null, 
-      invoiceNote:      null,
-      invoiceSubmittedAt: null,
-      receivedDate:     null, 
-      receivedAttachment: null, 
-      receivedNote:     null,
-      receivedBy:       null, 
-      receivedAt:       null,
+    try {
+      await new Promise(r => setTimeout(r, 350))
+      
+      // Calculate grand total
+      const grandTotal = calculateGrandTotal()
+      
+      // Calculate deductions
+      const finalAdvanceDeduction = calculateAdvanceDeduction()
+      const totalClaimValue = grandTotal - finalAdvanceDeduction // Total Claim Value หลังหัก Advance
+      
+      const finalRetentionReduce = calculateRetentionReduce()
+      
+      // Recalculate financial values based on Total Claim Value
+      const finalValue = totalClaimValue
+      const finalAdv = finalAdvanceDeduction
+      const finalRet = finalRetentionReduce
+      const finalWithTaxPercent = parseCurrency(form.withTaxPercent)
+      
+      // Calculate balance: (Total Claim Value × 1.07) - Retention - With Tax
+      const { grossClaim: finalGrossClaim, withTaxAmount: finalWithTaxAmount, balanceValue: finalBalance } = 
+        calculatePaymentBalance(finalValue, 0, finalRet, finalWithTaxPercent)
+      
+      // Prepare payment data
+      const paymentData = {
+        projectId:        form.projectId,
+        type:             claimMainContract ? 'main' : 'coa', // ถ้า claim main contract ให้เป็น main, ไม่งั้นเป็น coa
+        paymentNo:        form.paymentNo,
+        detail:           form.detail,
+        value:            finalValue,
+        otherClaim:       parseCurrency(form.otherClaim),
+        advanceDeduction: finalAdv,
+        advanceDeductionType: useAdvanceDeduction ? advanceDeductionType : null,
+        advanceDeductionValue: useAdvanceDeduction ? parseCurrency(advanceDeductionValue) : null,
+        advanceDeductionSources: useAdvanceDeduction ? advanceDeductionSources : null,
+        retentionReduce:  finalRet,
+        retentionReduceType: useRetentionReduce ? retentionReduceType : null,
+        retentionReduceValue: useRetentionReduce ? parseCurrency(retentionReduceValue) : null,
+        withTaxPercent:   finalWithTaxPercent,
+        withTaxValue:     finalWithTaxAmount,
+        grossClaimValue:  finalGrossClaim,
+        balanceValue:     finalBalance,
+        attachment:       form.attachment,
+        note:             form.note,
+        status:           'Pending PM', // Changed from 'In Progress' to 'Pending PM'
+        createdBy:        currentUser.id,
+        claimMainContract: claimMainContract,
+        claimCOA:         claimCOA,
+        invoiceNo:        null, 
+        invoiceDueDate:   null, 
+        invoiceNote:      null,
+        invoiceSubmittedAt: null,
+        receivedDate:     null, 
+        receivedAttachment: null, 
+        receivedNote:     null,
+        receivedBy:       null, 
+        receivedAt:       null,
+      }
+      
+      // Add claim-specific data
+      if (claimMainContract) {
+        paymentData.mainContractItems = mainContractItems.map(item => ({
+          no: item.no,
+          description: item.description,
+          value: parseCurrency(item.value)
+        }))
+      }
+      
+      if (claimCOA) {
+        paymentData.coaItems = coaItems.map(coaItem => {
+          const coa = projectCOAs.find(c => c.id === coaItem.coaId)
+          return {
+            coaId: coaItem.coaId,
+            coaNo: coa?.coaNo,
+            items: coaItem.items.map(item => ({
+              no: item.no,
+              description: item.description,
+              value: parseCurrency(item.value)
+            }))
+          }
+        })
+      }
+      
+      await addPayment(paymentData)
+      setSaving(false)
+      onClose()
+    } catch (error) {
+      console.error('Error creating payment:', error)
+      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' + error.message)
+      setSaving(false)
     }
-    
-    // Add claim-specific data
-    if (claimMainContract) {
-      paymentData.mainContractItems = mainContractItems.map(item => ({
-        no: item.no,
-        description: item.description,
-        value: parseCurrency(item.value)
-      }))
-    }
-    
-    if (claimCOA) {
-      paymentData.coaItems = coaItems.map(coaItem => {
-        const coa = projectCOAs.find(c => c.id === coaItem.coaId)
-        return {
-          coaId: coaItem.coaId,
-          coaNo: coa?.coaNo,
-          items: coaItem.items.map(item => ({
-            no: item.no,
-            description: item.description,
-            value: parseCurrency(item.value)
-          }))
-        }
-      })
-    }
-    
-    addPayment(paymentData)
-    setSaving(false)
-    onClose()
   }
 
   return (
@@ -705,6 +799,135 @@ export default function PaymentCreateModal({ projects, onClose }) {
           </div>
         </div>
 
+        {/* Item Deduction Section */}
+        <div className="rounded-xl border border-slate-200 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-600">
+            <span className="text-sm font-semibold text-white">Item Deduction</span>
+          </div>
+          <div className="p-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Advance Deduction - Takes 2 columns */}
+              <div className="lg:col-span-2">
+                <FormField label="Advance Deduction">
+                  <div className="space-y-2">
+                    {/* Checkbox to enable/disable */}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useAdvanceDeduction}
+                        onChange={(e) => {
+                          setUseAdvanceDeduction(e.target.checked)
+                          if (!e.target.checked) {
+                            setAdvanceDeductionValue('')
+                            setAdvanceDeductionSources({ mainContract: false, coa: false })
+                          }
+                        }}
+                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="text-xs font-medium text-slate-600">Enable Advance Deduction</span>
+                    </label>
+                    
+                    {useAdvanceDeduction ? (
+                      <>
+                        {/* Source Selection */}
+                        <div className="flex gap-3 pl-6">
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={advanceDeductionSources.mainContract}
+                              onChange={(e) => setAdvanceDeductionSources(prev => ({ ...prev, mainContract: e.target.checked }))}
+                              disabled={!claimMainContract}
+                              className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                            />
+                            <span className="text-xs text-slate-600">Main Contract</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={advanceDeductionSources.coa}
+                              onChange={(e) => setAdvanceDeductionSources(prev => ({ ...prev, coa: e.target.checked }))}
+                              disabled={!claimCOA}
+                              className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                            />
+                            <span className="text-xs text-slate-600">COA</span>
+                          </label>
+                        </div>
+
+                        {/* Type Dropdown */}
+                        <Select 
+                          value={advanceDeductionType} 
+                          onChange={(e) => setAdvanceDeductionType(e.target.value)}
+                        >
+                          <option value="percentage">Percentage (%)</option>
+                          <option value="amount">Amount (฿)</option>
+                        </Select>
+                        
+                        {/* Input Field */}
+                        {advanceDeductionType === 'percentage' ? (
+                          <div className="relative">
+                            <Input
+                              inputMode="decimal"
+                              placeholder="0.00"
+                              value={fmtInput(advanceDeductionValue)}
+                              onChange={e => setAdvanceDeductionValue(sanitizeCurrencyInput(e.target.value))}
+                              className="pr-7"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">฿</span>
+                            <Input
+                              inputMode="decimal"
+                              placeholder="0"
+                              value={fmtInput(advanceDeductionValue)}
+                              onChange={e => setAdvanceDeductionValue(sanitizeCurrencyInput(e.target.value))}
+                              className="pl-7"
+                            />
+                          </div>
+                        )}
+                        
+                        {/* Show calculated amount */}
+                        {advanceDeductionValue && (
+                          <div className="text-xs text-slate-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                            {advanceDeductionType === 'percentage' && (
+                              <span className="text-slate-500">Base: ฿{getAdvanceDeductionBase().toLocaleString()} × {advanceDeductionValue}% = </span>
+                            )}
+                            <span className="font-semibold">฿{calculateAdvanceDeduction().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-xs text-slate-400 italic px-2 py-2 bg-slate-50 rounded border border-slate-200">
+                        Not applied
+                      </div>
+                    )}
+                  </div>
+                </FormField>
+              </div>
+
+              {/* Other Claim - Takes 1 column */}
+              <div className="lg:col-span-1">
+                <FormField label="Other Claim">
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">฿</span>
+                      <Input
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={fmtInput(form.otherClaim)}
+                        onChange={e => set('otherClaim', sanitizeCurrencyInput(e.target.value))}
+                        className="pl-7"
+                      />
+                    </div>
+                    <p className="text-xs text-slate-500">Additional claim amount</p>
+                  </div>
+                </FormField>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Financial Calculation Section */}
         <div className="rounded-xl border border-slate-200 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-700">
@@ -712,7 +935,7 @@ export default function PaymentCreateModal({ projects, onClose }) {
             <span className="text-sm font-semibold text-white">Financial Calculation</span>
           </div>
           <div className="p-4 space-y-3">
-            {/* Grand Total Display */}
+            {/* Grand Total Display - After Advance Deduction */}
             {(claimMainContract || claimCOA) && (
               <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4">
                 <div className="flex items-center justify-between">
@@ -722,12 +945,21 @@ export default function PaymentCreateModal({ projects, onClose }) {
                       {claimMainContract && claimCOA && 'Main Contract + COA'}
                       {claimMainContract && !claimCOA && 'Main Contract'}
                       {!claimMainContract && claimCOA && 'COA'}
+                      {parseCurrency(form.otherClaim) > 0 && ' + Other Claim'}
+                      {useAdvanceDeduction && ' (After Advance Deduction)'}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-blue-700">
-                      ฿{grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ฿{(grandTotal - adv).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
+                    {(useAdvanceDeduction && adv > 0) || parseCurrency(form.otherClaim) > 0 ? (
+                      <p className="text-xs text-slate-500 mt-1">
+                        {parseCurrency(form.otherClaim) > 0 && `Original: ฿${(grandTotal - parseCurrency(form.otherClaim)).toLocaleString()}`}
+                        {parseCurrency(form.otherClaim) > 0 && ` + Other: ฿${parseCurrency(form.otherClaim).toLocaleString()}`}
+                        {useAdvanceDeduction && adv > 0 && ` - Advance: ฿${adv.toLocaleString()}`}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -737,31 +969,81 @@ export default function PaymentCreateModal({ projects, onClose }) {
               <div className="text-xs text-rose-600 font-medium">{errors.value}</div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <FormField label="Advance Deduction (฿)">
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">฿</span>
-                  <Input
-                    inputMode="decimal"
-                    placeholder="0"
-                    value={fmtInput(form.advanceDeduction)}
-                    onChange={e => set('advanceDeduction', sanitizeCurrencyInput(e.target.value))}
-                    className="pl-7"
-                  />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Retention Reduce */}
+              <FormField label="Retention Reduce">
+                <div className="space-y-2">
+                  {/* Checkbox to enable/disable */}
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useRetentionReduce}
+                      onChange={(e) => {
+                        setUseRetentionReduce(e.target.checked)
+                        if (!e.target.checked) {
+                          setRetentionReduceValue('')
+                        }
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-xs font-medium text-slate-600">Enable Retention Reduce</span>
+                  </label>
+                  
+                  {useRetentionReduce ? (
+                    <>
+                      {/* Type Dropdown */}
+                      <Select 
+                        value={retentionReduceType} 
+                        onChange={(e) => setRetentionReduceType(e.target.value)}
+                      >
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="amount">Amount (฿)</option>
+                      </Select>
+                      
+                      {/* Input Field */}
+                      {retentionReduceType === 'percentage' ? (
+                        <div className="relative">
+                          <Input
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={fmtInput(retentionReduceValue)}
+                            onChange={e => setRetentionReduceValue(sanitizeCurrencyInput(e.target.value))}
+                            className="pr-7"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">฿</span>
+                          <Input
+                            inputMode="decimal"
+                            placeholder="0"
+                            value={fmtInput(retentionReduceValue)}
+                            onChange={e => setRetentionReduceValue(sanitizeCurrencyInput(e.target.value))}
+                            className="pl-7"
+                          />
+                        </div>
+                      )}
+                      
+                      {/* Show calculated amount */}
+                      {retentionReduceValue && (
+                        <div className="text-xs text-slate-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                          {retentionReduceType === 'percentage' && (
+                            <span className="text-slate-500">Base: ฿{getRetentionReduceBase().toLocaleString()} × {retentionReduceValue}% = </span>
+                          )}
+                          <span className="font-semibold">฿{calculateRetentionReduce().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-xs text-slate-400 italic px-2 py-2 bg-slate-50 rounded border border-slate-200">
+                      Not applied
+                    </div>
+                  )}
                 </div>
               </FormField>
-              <FormField label="Retention Reduce (฿)">
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">฿</span>
-                  <Input
-                    inputMode="decimal"
-                    placeholder="0"
-                    value={fmtInput(form.retentionReduce)}
-                    onChange={e => set('retentionReduce', sanitizeCurrencyInput(e.target.value))}
-                    className="pl-7"
-                  />
-                </div>
-              </FormField>
+
+              {/* With Tax */}
               <FormField label="With Tax (%)">
                 <div className="relative">
                   <Input
@@ -783,7 +1065,7 @@ export default function PaymentCreateModal({ projects, onClose }) {
             )}>
               <div className="text-sm text-slate-600">
                 <span className="font-medium">Balance Value</span>
-                <span className="text-slate-400 ml-2 text-xs">= Claim x 1.07 - Advance - Retention - With Tax</span>
+                <span className="text-slate-400 ml-2 text-xs">= (Total Claim × 1.07) - Retention - With Tax</span>
               </div>
               <span className={clsx(
                 'text-lg font-bold',
