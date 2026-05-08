@@ -1,12 +1,16 @@
 import { clsx } from 'clsx'
 
-export default function Card({ children, className, padding = true }) {
+export default function Card({ children, className, padding = true, onDoubleClick }) {
   return (
-    <div className={clsx(
-      'bg-white rounded-xl border border-slate-200 shadow-sm',
-      padding && 'p-6',
-      className
-    )}>
+    <div
+      className={clsx(
+        'bg-white rounded-xl border border-slate-200 shadow-sm',
+        padding && 'p-6',
+        onDoubleClick && 'cursor-pointer select-none',
+        className
+      )}
+      onDoubleClick={onDoubleClick}
+    >
       {children}
     </div>
   )

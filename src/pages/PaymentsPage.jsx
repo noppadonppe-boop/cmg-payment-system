@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Plus, ChevronDown, CreditCard, CheckCircle2, Clock,
-  Send, Banknote, Filter, AlertCircle, Eye, ArrowRight,
+  Send, Banknote, Filter, AlertCircle, ArrowRight,
   FileText, User, Calendar, Hash, Trash2
 } from 'lucide-react'
 import { useData } from '../context/DataContext'
@@ -73,6 +73,9 @@ export default function PaymentsPage() {
   const [approveRevisionPayment, setApproveRevisionPayment] = useState(null)
   const [approveRevisionAction, setApproveRevisionAction] = useState(null)
   const [draftEditPayment, setDraftEditPayment] = useState(null)
+  
+  // detailPayment will now store { pay, actions } so the modal can render the actions
+  const [detailModalData, setDetailModalData] = useState(null)
 
   const visibleProjects = projects.filter(p => hasProjectAccess(p.id))
 
@@ -145,6 +148,17 @@ export default function PaymentsPage() {
   const getActions = (pay) => {
     const actions = []
     
+    // Helper to wrap the click handlers so they also close the detail modal if it's open
+    const handleAction = (setter) => () => {
+      setDetailModalData(null)
+      setter(pay)
+    }
+    const handleRevisionAction = (actionType) => () => {
+      setDetailModalData(null)
+      setApproveRevisionPayment(pay)
+      setApproveRevisionAction(actionType)
+    }
+    
     // Map old statuses to new ones for backward compatibility
     let status = pay.status
     if (status === 'In Progress') status = 'Pending PM'
@@ -156,59 +170,61 @@ export default function PaymentsPage() {
     // Stage 1: ISSUE PAYMENT
     // 1.0: Draft - QsENG can edit and submit
     if (isQsEng && status === 'Draft') {
-      actions.push({ label: 'Edit & Submit', variant: 'primary', onClick: () => setDraftEditPayment(pay) })
+      actions.push({ label: 'Edit & Submit', variant: 'primary', onClick: handleAction(setDraftEditPayment) })
     }
     
     // 1.1: Pending PM - PM can review and approve/reject
     if (isPM && status === 'Pending PM') {
-      actions.push({ label: 'Review & Approve', variant: 'primary', onClick: () => setApprovePayment(pay) })
+      actions.push({ label: 'Review & Approve', variant: 'primary', onClick: handleAction(setApprovePayment) })
     }
     
     // 1.1: PM Rejected - QsENG can edit and resubmit
     if (isQsEng && status === 'PM Rejected') {
-      actions.push({ label: 'Edit & Resubmit', variant: 'primary', onClick: () => setEditPayment(pay) })
+      actions.push({ label: 'Edit & Resubmit', variant: 'primary', onClick: handleAction(setEditPayment) })
     }
     
     // Stage 1.x: Revision Request - PM can approve/reject revision request
     if (isPM && pay.revisionRequest && pay.revisionRequest.status === 'Pending') {
-      actions.push({ label: 'Review Revision Request', variant: 'amber', onClick: () => {
-        setApproveRevisionPayment(pay)
-        setApproveRevisionAction('approve')
-      }})
+      actions.push({ label: 'Review Revision Request', variant: 'amber', onClick: handleRevisionAction('approve') })
     }
     
     // Stage 2: ISSUE INVOICE
     // 2.0: PM Approved - QsENG can create invoice draft or request revision
     if (isQsEng && status === 'PM Approved' && !pay.revisionRequest) {
-      actions.push({ label: 'Create Invoice', variant: 'primary', onClick: () => setInvoicePayment(pay) })
-      actions.push({ label: 'Request Edit', variant: 'secondary', onClick: () => setRequestRevisionPayment(pay) })
+      actions.push({ label: 'Create Invoice', variant: 'primary', onClick: handleAction(setInvoicePayment) })
+      actions.push({ label: 'Request Edit', variant: 'secondary', onClick: handleAction(setRequestRevisionPayment) })
     }
     
     // 2.0: Invoice Draft - QsENG can submit invoice for PM review
     if (isQsEng && status === 'Invoice Draft') {
-      actions.push({ label: 'Submit Invoice', variant: 'primary', onClick: () => setInvoicePayment(pay) })
+      actions.push({ label: 'Submit Invoice', variant: 'primary', onClick: handleAction(setInvoicePayment) })
     }
     
     // 2.1: Invoice Pending PM - PM can review invoice and approve/reject
     if (isPM && status === 'Invoice Pending PM') {
-      actions.push({ label: 'Review Invoice', variant: 'primary', onClick: () => setApprovePayment(pay) })
+      actions.push({ label: 'Review Invoice', variant: 'primary', onClick: handleAction(setApprovePayment) })
     }
     
     // 2.1: Invoice PM Rejected - QsENG can edit and resubmit invoice
     if (isQsEng && status === 'Invoice PM Rejected') {
-      actions.push({ label: 'Edit & Resubmit Invoice', variant: 'primary', onClick: () => setInvoicePayment(pay) })
+      actions.push({ label: 'Edit & Resubmit Invoice', variant: 'primary', onClick: handleAction(setInvoicePayment) })
     }
     
     // 2.2: Client Sign Pending - QsENG can upload signed document
     if (isQsEng && status === 'Client Sign Pending') {
-      actions.push({ label: 'Upload Signed Invoice', variant: 'primary', onClick: () => setInvoicePayment(pay) })
+      actions.push({ label: 'Upload Signed Invoice', variant: 'primary', onClick: handleAction(setInvoicePayment) })
     }
     
     // Stage 3: ACC RECEIVE
-    // 3.0: Invoice Submitted - AccCMG can confirm and complete
+    // 3.0: Invoice Submitted - AccCMG can accept
     if (isAccCMG && status === 'Invoice Submitted') {
-      actions.push({ label: 'Complete Payment', variant: 'emerald', onClick: () => setReceivedPayment(pay) })
-      actions.push({ label: 'Request Edit', variant: 'secondary', onClick: () => setRequestRevisionPayment(pay) })
+      actions.push({ label: 'Accept', variant: 'primary', onClick: handleAction(setReceivedPayment) })
+      actions.push({ label: 'Request Edit', variant: 'secondary', onClick: handleAction(setRequestRevisionPayment) })
+    }
+    
+    // 3.1: Income Confirm Pending - AccCMG can confirm receive with attachment
+    if (isAccCMG && status === 'Income Confirm Pending') {
+      actions.push({ label: 'Confirm Receive', variant: 'emerald', onClick: handleAction(setReceivedPayment) })
     }
     
     return actions
@@ -311,7 +327,7 @@ export default function PaymentsPage() {
                 sc={sc}
                 actions={actions}
                 canDelete={isSuperAdmin}
-                onView={() => setDetailPayment(pay)}
+                onView={() => setDetailModalData({ pay, actions })}
                 onDelete={() => handleDeletePayment(pay)}
               />
             )
@@ -326,12 +342,15 @@ export default function PaymentsPage() {
           onClose={() => setCreateOpen(false)}
         />
       )}
-      {detailPayment && (
+      {detailModalData && (
         <PaymentDetailModal
-          payment={detailPayment}
-          onClose={() => setDetailPayment(null)}
+          payment={detailModalData.pay}
+          actions={detailModalData.actions}
+          onClose={() => setDetailModalData(null)}
           onAction={(action) => {
-            setDetailPayment(null)
+            // Keep onAction for any internal components that might still use it
+            setDetailModalData(null)
+            const detailPayment = detailModalData.pay
             if (action === 'approve') setApprovePayment(detailPayment)
             if (action === 'invoice') setInvoicePayment(detailPayment)
             if (action === 'received') setReceivedPayment(detailPayment)
@@ -413,7 +432,7 @@ function PaymentRow({ pay, project, creator, sc, actions, canDelete, onView, onD
   if (status === 'Received') status = 'Completed'
 
   return (
-    <Card padding={false} className="overflow-hidden hover:shadow-md transition-shadow">
+    <Card padding={false} className="overflow-hidden hover:shadow-md transition-shadow" onDoubleClick={onView}>
       {/* Left accent bar */}
       <div className="flex">
         <div className={clsx(
@@ -431,9 +450,9 @@ function PaymentRow({ pay, project, creator, sc, actions, canDelete, onView, onD
         )} />
 
         <div className="flex-1 py-2 px-3 sm:py-2.5 sm:px-4">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-4">
+          <div className="flex flex-wrap items-center gap-4 lg:gap-5">
             {/* Identity */}
-            <div className="flex-1 min-w-0 space-y-1">
+            <div className="flex-1 min-w-[280px] space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[13px] font-bold text-slate-800">{pay.paymentNo}</span>
                 <Badge variant={sc.badge} className="scale-90 origin-left">
@@ -488,13 +507,7 @@ function PaymentRow({ pay, project, creator, sc, actions, canDelete, onView, onD
             </div>
 
             {/* Actions */}
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={onView}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-              >
-                <Eye size={13} /> Detail
-              </button>
+            <div className="hidden xl:flex items-center gap-2 shrink-0">
               {actions.map((a, i) => (
                 <Button key={i} variant={a.variant} size="sm" onClick={a.onClick}>
                   {a.label}
@@ -546,7 +559,9 @@ export function MiniStepper({ status }) {
     { 
       key: 'step3', 
       label: 'Receive',
-      subSteps: []
+      subSteps: [
+        { key: 'sub4', label: 'Confirm', statuses: ['Income Confirm Pending'] }
+      ]
     },
     { 
       key: 'step4', 
@@ -558,7 +573,8 @@ export function MiniStepper({ status }) {
   // Determine current step and sub-step
   const getCurrentStep = () => {
     if (mappedStatus === 'Completed') return { step: 4, subStep: null }
-    if (mappedStatus === 'Invoice Submitted' || mappedStatus === 'Income Confirm Pending') return { step: 3, subStep: 0 }
+    if (mappedStatus === 'Income Confirm Pending') return { step: 3, subStep: 1 }
+    if (mappedStatus === 'Invoice Submitted') return { step: 3, subStep: 0 }
     if (mappedStatus === 'PM Approved' || mappedStatus === 'Invoice Draft' || 
         mappedStatus === 'Invoice Pending PM' || mappedStatus === 'Invoice PM Rejected' || 
         mappedStatus === 'Client Sign Pending') {

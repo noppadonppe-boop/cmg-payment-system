@@ -523,16 +523,16 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
 
         {/* Claim Type Selection */}
         <div className="rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-700">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-700">
             <span className="text-sm font-semibold text-white">Claim Type</span>
           </div>
-          <div className="p-4 space-y-4">
+          <div className="p-3 space-y-2">
             {errors.claimType && (
               <div className="text-xs text-rose-600 font-medium">{errors.claimType}</div>
             )}
             
             {/* Claim Main Contract Checkbox */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -546,7 +546,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
               </label>
 
               {claimMainContract && (
-                <div className="ml-6 space-y-3">
+                <div className="ml-5 space-y-2">
                   {currentProject && (
                     <div className="text-xs text-slate-600 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
                       <span className="font-semibold">Main Contract Value: </span>
@@ -568,17 +568,17 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-16">No.</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Description</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-40">Value (฿)</th>
-                          <th className="px-3 py-2 w-10"></th>
+                          <th className="px-2 py-1 text-left text-xs font-semibold text-slate-600 w-16">No.</th>
+                          <th className="px-2 py-1 text-left text-xs font-semibold text-slate-600">Description</th>
+                          <th className="px-2 py-1 text-left text-xs font-semibold text-slate-600 w-40">Value (฿)</th>
+                          <th className="px-2 py-1 w-10"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {mainContractItems.map((item, idx) => (
                           <tr key={item.id} className="hover:bg-slate-50">
-                            <td className="px-3 py-2 text-slate-600 font-medium">{item.no}</td>
-                            <td className="px-3 py-2">
+                            <td className="px-2 py-1 text-slate-600 font-medium">{item.no}</td>
+                            <td className="px-2 py-1">
                               <input
                                 type="text"
                                 value={item.description}
@@ -587,7 +587,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                                 className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                               />
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-2 py-1">
                               <input
                                 type="text"
                                 inputMode="decimal"
@@ -599,7 +599,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                                 className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                               />
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-2 py-1">
                               {mainContractItems.length > 1 && (
                                 <button
                                   type="button"
@@ -613,8 +613,8 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                           </tr>
                         ))}
                         <tr className="bg-slate-50">
-                          <td colSpan="2" className="px-3 py-2 text-right font-semibold text-slate-700">Total:</td>
-                          <td className="px-3 py-2 font-bold text-blue-700">
+                          <td colSpan="2" className="px-2 py-1 text-right font-semibold text-slate-700">Total:</td>
+                          <td className="px-2 py-1 font-bold text-blue-700">
                             ฿{calculateMainContractTotal().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           <td></td>
@@ -626,7 +626,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                   <button
                     type="button"
                     onClick={addMainContractItem}
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
                   >
                     <Plus size={14} />
                     Add Row
@@ -636,7 +636,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
             </div>
 
             {/* Claim COA Checkbox */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -653,7 +653,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
               </label>
 
               {claimCOA && (
-                <div className="ml-6 space-y-4">
+                <div className="ml-5 space-y-2">
                   {projectCOAs.length === 0 ? (
                     <div className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
                       No COA available for this project
@@ -696,7 +696,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                         return (
                           <div key={coaItem.coaId} className="border border-purple-200 rounded-lg overflow-hidden">
                             {/* COA Header */}
-                            <div className="bg-purple-600 px-4 py-2.5 flex items-center justify-between">
+                            <div className="bg-purple-600 px-3 py-1.5 flex items-center justify-between">
                               <div>
                                 <h4 className="text-sm font-semibold text-white">{coa.coaNo}</h4>
                                 <p className="text-xs text-purple-100">{coa.description}</p>
@@ -710,7 +710,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                               </button>
                             </div>
 
-                            <div className="p-3 space-y-3">
+                            <div className="p-2 space-y-2">
                               {/* COA Value Info */}
                               <div className="text-xs text-slate-600 bg-purple-50 px-3 py-2 rounded-lg border border-purple-200">
                                 <span className="font-semibold">COA Value: </span>
@@ -732,17 +732,17 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                                 <table className="w-full text-sm">
                                   <thead className="bg-slate-50 border-b border-slate-200">
                                     <tr>
-                                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-16">No.</th>
-                                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Description</th>
-                                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-40">Value (฿)</th>
-                                      <th className="px-3 py-2 w-10"></th>
+                                      <th className="px-2 py-1 text-left text-xs font-semibold text-slate-600 w-16">No.</th>
+                                      <th className="px-2 py-1 text-left text-xs font-semibold text-slate-600">Description</th>
+                                      <th className="px-2 py-1 text-left text-xs font-semibold text-slate-600 w-40">Value (฿)</th>
+                                      <th className="px-2 py-1 w-10"></th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-100">
                                     {coaItem.items.map((item) => (
                                       <tr key={item.id} className="hover:bg-slate-50">
-                                        <td className="px-3 py-2 text-slate-600 font-medium">{item.no}</td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-2 py-1 text-slate-600 font-medium">{item.no}</td>
+                                        <td className="px-2 py-1">
                                           <input
                                             type="text"
                                             value={item.description}
@@ -751,7 +751,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                                             className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
                                           />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-2 py-1">
                                           <input
                                             type="text"
                                             inputMode="decimal"
@@ -763,7 +763,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                                             className="w-full px-2 py-1 text-sm border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
                                           />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-2 py-1">
                                           {coaItem.items.length > 1 && (
                                             <button
                                               type="button"
@@ -777,8 +777,8 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                                       </tr>
                                     ))}
                                     <tr className="bg-purple-50">
-                                      <td colSpan="2" className="px-3 py-2 text-right font-semibold text-slate-700">Total:</td>
-                                      <td className="px-3 py-2 font-bold text-purple-700">
+                                      <td colSpan="2" className="px-2 py-1 text-right font-semibold text-slate-700">Total:</td>
+                                      <td className="px-2 py-1 font-bold text-purple-700">
                                         ฿{calculateCOATotal(coaItem.coaId).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </td>
                                       <td></td>
@@ -790,7 +790,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                               <button
                                 type="button"
                                 onClick={() => addCOAItem(coaItem.coaId)}
-                                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors"
+                                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors"
                               >
                                 <Plus size={14} />
                                 Add Row
@@ -809,11 +809,11 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
 
         {/* Item Deduction Section */}
         <div className="rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-600">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-600">
             <span className="text-sm font-semibold text-white">Item Deduction</span>
           </div>
-          <div className="p-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="p-3">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
               {/* Advance Deduction - Takes 2 columns */}
               <div className="lg:col-span-2">
                 <FormField label="Advance Deduction">
@@ -938,14 +938,14 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
 
         {/* Financial Calculation Section */}
         <div className="rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-700">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-700">
             <Calculator size={14} className="text-slate-300" />
             <span className="text-sm font-semibold text-white">Financial Calculation</span>
           </div>
-          <div className="p-4 space-y-3">
+          <div className="p-3 space-y-2">
             {/* Grand Total Display - After Advance Deduction */}
             {(claimMainContract || claimCOA) && (
-              <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4">
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Total Claim Value</p>
@@ -977,7 +977,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
               <div className="text-xs text-rose-600 font-medium">{errors.value}</div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Retention Reduce */}
               <FormField label="Retention Reduce">
                 <div className="space-y-2">
@@ -1068,7 +1068,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
 
             {/* Balance Display */}
             <div className={clsx(
-              'flex items-center justify-between px-4 py-3 rounded-lg border',
+              'flex items-center justify-between px-3 py-2 rounded-lg border',
               balance >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'
             )}>
               <div className="text-sm text-slate-600">

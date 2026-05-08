@@ -15,7 +15,7 @@ function fmtCurrency(val) {
 }
 
 export default function InvoiceModal({ payment, onClose }) {
-  const { updatePayment } = useData()
+  const { updatePayment, projects } = useData()
   const { currentUser } = useAuth()
 
   // Map old status
@@ -28,11 +28,25 @@ export default function InvoiceModal({ payment, onClose }) {
   const isResubmittingInvoice = status === 'Invoice PM Rejected' // Resubmitting after PM rejection
   const isUploadingSignedDoc = status === 'Client Sign Pending' // Uploading signed document
 
+  const project = projects?.find(p => p.id === payment.projectId)
+  const contractNos = []
+  if (payment.claimMainContract && project?.contractNo) {
+    contractNos.push(project.contractNo)
+  }
+  if (payment.claimCOA && payment.coaItems?.length > 0) {
+    payment.coaItems.forEach(coa => {
+      if (coa.coaNo) contractNos.push(coa.coaNo)
+    })
+  }
+  const contractNoString = contractNos.join(', ') || '—'
+
   const [form, setForm] = useState({
     invoiceNo: payment.invoiceNo || '',
+    invoiceDate: payment.invoiceDate || '',
     invoiceDueDate: payment.invoiceDueDate || '',
     invoiceNote: payment.invoiceNote || '',
     clientSignedDoc: payment.clientSignedDoc || '',
+    paymentApprovedDoc: payment.paymentApprovedDoc || '',
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
@@ -45,6 +59,7 @@ export default function InvoiceModal({ payment, onClose }) {
   const validate = () => {
     const errs = {}
     if (!form.invoiceNo.trim())    errs.invoiceNo    = 'Invoice number is required'
+    if (!form.invoiceDate)         errs.invoiceDate  = 'Invoice date is required'
     if (!form.invoiceDueDate)      errs.invoiceDueDate = 'Payment due date is required'
     
     // If uploading signed document, require the file
@@ -63,8 +78,10 @@ export default function InvoiceModal({ payment, onClose }) {
     
     const updates = {
       invoiceNo:          form.invoiceNo,
+      invoiceDate:        form.invoiceDate,
       invoiceDueDate:     form.invoiceDueDate,
       invoiceNote:        form.invoiceNote,
+      paymentApprovedDoc: form.paymentApprovedDoc,
       invoiceIssuedBy:    currentUser.id,
     }
     
@@ -110,8 +127,8 @@ export default function InvoiceModal({ payment, onClose }) {
       onClose={onClose}
     >
       <div className="space-y-4">
-        {/* Approved claim summary */}
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-2">
+        {/* Approved claim summary - Compact view mimicking Review Payment Claim */}
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FileText size={14} className="text-emerald-600" />
@@ -119,21 +136,107 @@ export default function InvoiceModal({ payment, onClose }) {
             </div>
             <Badge variant="emerald">PM Approved</Badge>
           </div>
-          <p className="text-sm text-slate-600">{payment.detail}</p>
-          <div className="flex items-center gap-6 text-xs pt-1 flex-wrap">
-            <div>
-              <span className="text-slate-400">Claim Value</span>
-              <p className="font-semibold text-slate-700">{fmtCurrency(payment.value)}</p>
+          
+          {payment.detail && <p className="text-xs text-slate-600">{payment.detail}</p>}
+          
+          {/* Main Contract Items */}
+          {payment.claimMainContract && payment.mainContractItems && payment.mainContractItems.length > 0 && (
+            <div className="space-y-1">
+              <h4 className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Main Contract Items</h4>
+              <div className="rounded border border-emerald-200 overflow-hidden bg-white/60">
+                <table className="w-full text-[10px] sm:text-xs">
+                  <thead className="bg-emerald-100/50 border-b border-emerald-200">
+                    <tr>
+                      <th className="px-2 py-1 text-left font-semibold text-emerald-800 w-8">No.</th>
+                      <th className="px-2 py-1 text-left font-semibold text-emerald-800">Description</th>
+                      <th className="px-2 py-1 text-right font-semibold text-emerald-800 w-24">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-100">
+                    {payment.mainContractItems.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="px-2 py-1 text-emerald-700">{item.no}</td>
+                        <td className="px-2 py-1 text-emerald-800">{item.description}</td>
+                        <td className="px-2 py-1 text-right font-semibold text-emerald-900">{fmtCurrency(item.value)}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-emerald-100/50 font-semibold">
+                      <td colSpan="2" className="px-2 py-1 text-right text-emerald-800">Total:</td>
+                      <td className="px-2 py-1 text-right text-emerald-900">
+                        {fmtCurrency(payment.mainContractItems.reduce((sum, item) => sum + (item.value || 0), 0))}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div>
-              <span className="text-slate-400">Deductions</span>
-              <p className="font-medium text-rose-600">
-                −{fmtCurrency((payment.advanceDeduction || 0) + (payment.retentionReduce || 0) + (payment.withTaxValue || 0))}
-              </p>
+          )}
+
+          {/* COA Items */}
+          {payment.claimCOA && payment.coaItems && payment.coaItems.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">COA Items</h4>
+              <div className="grid gap-2">
+                {payment.coaItems.map((coaItem, coaIdx) => (
+                  <div key={coaIdx} className="border border-emerald-200 rounded overflow-hidden bg-white/60">
+                    <div className="bg-emerald-100/80 px-2 py-1 flex justify-between items-center">
+                      <h5 className="text-[10px] font-semibold text-emerald-800">{coaItem.coaNo}</h5>
+                    </div>
+                    <table className="w-full text-[10px] sm:text-xs">
+                      <thead className="bg-emerald-50 border-b border-emerald-100 border-t">
+                        <tr>
+                          <th className="px-2 py-1 text-left font-semibold text-emerald-700 w-8">No.</th>
+                          <th className="px-2 py-1 text-left font-semibold text-emerald-700">Description</th>
+                          <th className="px-2 py-1 text-right font-semibold text-emerald-700 w-24">Value</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-emerald-100">
+                        {coaItem.items.map((item, idx) => (
+                          <tr key={idx}>
+                            <td className="px-2 py-1 text-emerald-600">{item.no}</td>
+                            <td className="px-2 py-1 text-emerald-700">{item.description}</td>
+                            <td className="px-2 py-1 text-right font-semibold text-emerald-800">{fmtCurrency(item.value)}</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-emerald-100/30 font-semibold">
+                          <td colSpan="2" className="px-2 py-1 text-right text-emerald-800">Total:</td>
+                          <td className="px-2 py-1 text-right text-emerald-900">
+                            {fmtCurrency(coaItem.items.reduce((sum, item) => sum + (item.value || 0), 0))}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div>
-              <span className="text-slate-400">Balance Payable</span>
-              <p className="font-bold text-emerald-700 text-base">{fmtCurrency(payment.balanceValue)}</p>
+          )}
+          
+          {/* Other Claim */}
+          {payment.otherClaim && payment.otherClaim > 0 && (
+            <div className="flex items-center justify-between px-2 py-1.5 bg-white/60 border border-emerald-200 rounded">
+              <span className="text-[10px] font-semibold text-emerald-800">Other Claim</span>
+              <span className="text-xs font-bold text-emerald-900">{fmtCurrency(payment.otherClaim)}</span>
+            </div>
+          )}
+
+          {/* Financial Breakdown */}
+          <div className="rounded border border-emerald-200 overflow-hidden bg-white/60">
+            <div className="grid grid-cols-6 text-[9px] font-semibold text-emerald-700 uppercase tracking-wide bg-emerald-100/50 px-2 py-1 border-b border-emerald-200 text-center">
+              <span>Claim Value</span>
+              <span>VAT (7%)</span>
+              <span>Advance Ded.</span>
+              <span>Retention</span>
+              <span>With Tax</span>
+              <span className="text-emerald-900">Balance</span>
+            </div>
+            <div className="grid grid-cols-6 px-2 py-1.5 text-center items-center">
+              <span className="text-[10px] font-semibold text-emerald-800">{fmtCurrency(payment.value)}</span>
+              <span className="text-[10px] font-medium text-emerald-600">+{fmtCurrency(payment.value * 0.07)}</span>
+              <span className="text-[10px] font-medium text-rose-600">−{fmtCurrency(payment.advanceDeduction)}</span>
+              <span className="text-[10px] font-medium text-rose-600">−{fmtCurrency(payment.retentionReduce)}</span>
+              <span className="text-[10px] font-medium text-rose-600">-{fmtCurrency(payment.withTaxValue || 0)}</span>
+              <span className="text-xs font-bold text-emerald-900">{fmtCurrency(payment.balanceValue)}</span>
             </div>
           </div>
         </div>
@@ -145,6 +248,17 @@ export default function InvoiceModal({ payment, onClose }) {
             <span className="text-sm font-semibold text-white">Invoice Details</span>
           </div>
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField label="Contract No. / COR No.">
+              <div className="relative">
+                <FileText size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={contractNoString}
+                  disabled
+                  className="pl-8 bg-slate-50 text-slate-500"
+                />
+              </div>
+            </FormField>
+
             <FormField label="Invoice No." required error={errors.invoiceNo}>
               <div className="relative">
                 <Hash size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -158,7 +272,20 @@ export default function InvoiceModal({ payment, onClose }) {
               </div>
             </FormField>
 
-            <FormField label="Payment Due Date" required error={errors.invoiceDueDate}>
+            <FormField label="Invoice Date" required error={errors.invoiceDate}>
+              <div className="relative">
+                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Input
+                  type="date"
+                  value={form.invoiceDate}
+                  onChange={e => set('invoiceDate', e.target.value)}
+                  error={errors.invoiceDate}
+                  className="pl-8"
+                />
+              </div>
+            </FormField>
+
+            <FormField label="Due Date" required error={errors.invoiceDueDate}>
               <div className="relative">
                 <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <Input
@@ -169,6 +296,17 @@ export default function InvoiceModal({ payment, onClose }) {
                   className="pl-8"
                 />
               </div>
+            </FormField>
+
+            <FormField label="Payment Approved Attachment" className="sm:col-span-2">
+              <AttachmentField
+                value={form.paymentApprovedDoc}
+                onChange={v => set('paymentApprovedDoc', v)}
+                folder="invoices"
+                docId={payment.projectId}
+                uploadedBy={currentUser?.id}
+                placeholder="Upload Payment Approved document..."
+              />
             </FormField>
 
             <FormField label="Note" className="sm:col-span-2">

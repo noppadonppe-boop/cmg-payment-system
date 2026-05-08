@@ -1,6 +1,6 @@
 import {
   FileText, User, Calendar, CheckCircle2,
-  Clock, Send, Banknote, XCircle, Hash, AlertCircle
+  Clock, Send, Banknote, XCircle, Hash, AlertCircle, Paperclip
 } from 'lucide-react'
 import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
@@ -29,7 +29,7 @@ function InfoRow({ label, value }) {
   )
 }
 
-export default function PaymentDetailModal({ payment, onClose, onAction }) {
+export default function PaymentDetailModal({ payment, actions, onClose, onAction }) {
   const { projects } = useData()
   const { currentUser, USERS, can } = useAuth()
 
@@ -53,7 +53,7 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
 
   const currentStep =
     mappedStatus === 'Completed' ? 4 :
-    mappedStatus === 'Invoice Submitted' ? 3 :
+    (mappedStatus === 'Invoice Submitted' || mappedStatus === 'Income Confirm Pending') ? 3 :
     (mappedStatus === 'PM Approved' || mappedStatus === 'Invoice Draft' || mappedStatus === 'Invoice Pending PM' || mappedStatus === 'Invoice PM Rejected' || mappedStatus === 'Client Sign Pending') ? 2 :
     1
 
@@ -65,7 +65,7 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
       title={payment.paymentNo}
       subtitle={project?.name ?? '—'}
       onClose={onClose}
-      maxWidth="max-w-2xl"
+      maxWidth="max-w-4xl"
     >
       <div className="space-y-5">
         {/* Visual 4-Step Stepper */}
@@ -93,7 +93,7 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
           activeStep={1}
           color="blue"
         >
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-6 gap-y-2">
             <InfoRow label="Payment No." value={payment.paymentNo} />
             <InfoRow label="Submitted By" value={creator?.name} />
             <InfoRow label="Date" value={fmtDate(payment.createdAt)} />
@@ -115,22 +115,22 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-16">No.</th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Description</th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 w-32">Value</th>
+                      <th className="px-3 py-1 text-left text-xs font-semibold text-slate-600 w-16">No.</th>
+                      <th className="px-3 py-1 text-left text-xs font-semibold text-slate-600">Description</th>
+                      <th className="px-3 py-1 text-right text-xs font-semibold text-slate-600 w-32">Value</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {payment.mainContractItems.map((item, idx) => (
                       <tr key={idx} className="hover:bg-slate-50">
-                        <td className="px-3 py-2 text-slate-600 font-medium">{item.no}</td>
-                        <td className="px-3 py-2 text-slate-700">{item.description}</td>
-                        <td className="px-3 py-2 text-right font-semibold text-slate-800">{fmtCurrency(item.value)}</td>
+                        <td className="px-3 py-1 text-slate-600 font-medium">{item.no}</td>
+                        <td className="px-3 py-1 text-slate-700">{item.description}</td>
+                        <td className="px-3 py-1 text-right font-semibold text-slate-800">{fmtCurrency(item.value)}</td>
                       </tr>
                     ))}
                     <tr className="bg-slate-50 font-semibold">
-                      <td colSpan="2" className="px-3 py-2 text-right text-slate-700">Total:</td>
-                      <td className="px-3 py-2 text-right text-blue-700">
+                      <td colSpan="2" className="px-3 py-1 text-right text-slate-700">Total:</td>
+                      <td className="px-3 py-1 text-right text-blue-700">
                         {fmtCurrency(payment.mainContractItems.reduce((sum, item) => sum + (item.value || 0), 0))}
                       </td>
                     </tr>
@@ -145,29 +145,29 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
               <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wide">COA Items</h4>
               {payment.coaItems.map((coaItem, coaIdx) => (
                 <div key={coaIdx} className="border border-purple-200 rounded-lg overflow-hidden">
-                  <div className="bg-purple-600 px-3 py-2">
+                  <div className="bg-purple-600 px-3 py-1.5">
                     <h5 className="text-sm font-semibold text-white">{coaItem.coaNo}</h5>
                   </div>
                   <div className="overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600 w-16">No.</th>
-                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Description</th>
-                          <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600 w-32">Value</th>
+                          <th className="px-3 py-1 text-left text-xs font-semibold text-slate-600 w-16">No.</th>
+                          <th className="px-3 py-1 text-left text-xs font-semibold text-slate-600">Description</th>
+                          <th className="px-3 py-1 text-right text-xs font-semibold text-slate-600 w-32">Value</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {coaItem.items.map((item, idx) => (
                           <tr key={idx} className="hover:bg-slate-50">
-                            <td className="px-3 py-2 text-slate-600 font-medium">{item.no}</td>
-                            <td className="px-3 py-2 text-slate-700">{item.description}</td>
-                            <td className="px-3 py-2 text-right font-semibold text-slate-800">{fmtCurrency(item.value)}</td>
+                            <td className="px-3 py-1 text-slate-600 font-medium">{item.no}</td>
+                            <td className="px-3 py-1 text-slate-700">{item.description}</td>
+                            <td className="px-3 py-1 text-right font-semibold text-slate-800">{fmtCurrency(item.value)}</td>
                           </tr>
                         ))}
                         <tr className="bg-purple-50 font-semibold">
-                          <td colSpan="2" className="px-3 py-2 text-right text-slate-700">Total:</td>
-                          <td className="px-3 py-2 text-right text-purple-700">
+                          <td colSpan="2" className="px-3 py-1 text-right text-slate-700">Total:</td>
+                          <td className="px-3 py-1 text-right text-purple-700">
                             {fmtCurrency(coaItem.items.reduce((sum, item) => sum + (item.value || 0), 0))}
                           </td>
                         </tr>
@@ -202,15 +202,17 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
 
           {/* Financial breakdown */}
           <div className="mt-4 rounded-lg border border-slate-200 overflow-hidden">
-            <div className="grid grid-cols-5 text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50 px-4 py-2 border-b border-slate-200">
+            <div className="grid grid-cols-6 text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50 px-4 py-2 border-b border-slate-200 text-center">
               <span>Claim Value</span>
+              <span>VAT (7%)</span>
               <span>Advance Ded.</span>
               <span>Retention</span>
               <span>With Tax</span>
               <span className="text-emerald-700">Balance</span>
             </div>
-            <div className="grid grid-cols-5 px-4 py-3">
+            <div className="grid grid-cols-6 px-4 py-3 text-center items-center">
               <span className="text-sm font-semibold text-slate-800">{fmtCurrency(payment.value)}</span>
+              <span className="text-sm font-medium text-slate-600">+{fmtCurrency(payment.value * 0.07)}</span>
               <span className="text-sm font-medium text-rose-500">−{fmtCurrency(payment.advanceDeduction)}</span>
               <span className="text-sm font-medium text-rose-500">−{fmtCurrency(payment.retentionReduce)}</span>
               <span className="text-sm font-medium text-rose-500">-{fmtCurrency(payment.withTaxValue || 0)}</span>
@@ -299,6 +301,17 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
             </p>
           )}
 
+          {/* Client Signed Document — shown once invoice has been signed by client */}
+          {payment.clientSignedDoc && (
+            <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+              <Paperclip size={13} className="text-blue-500 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wide">Client Signed Document</p>
+                <AttachmentLink value={payment.clientSignedDoc} className="flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 font-medium truncate" />
+              </div>
+            </div>
+          )}
+
           {isQsEng && payment.status === 'Submitted' && !payment.revisionRequest && (
             <div className="mt-3 flex gap-2">
               {!payment.invoiceNo && (
@@ -335,6 +348,18 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
           color="emerald"
           locked={currentStep < 3}
         >
+
+          {/* Stage 3.1 — Accepted, awaiting bank slip */}
+          {mappedStatus === 'Income Confirm Pending' && (
+            <div className="mb-3 flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+              <AlertCircle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-700">
+                <p className="font-semibold">Stage 3.1 — Confirm Receive Pending</p>
+                <p className="mt-0.5">Payment accepted on {fmtDate(payment.acceptedAt)}. กรุณาแนบหลักฐานการรับเงินเพื่อ Complete.</p>
+              </div>
+            </div>
+          )}
+
           {payment.receivedDate ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
               <InfoRow label="Received Date" value={fmtDate(payment.receivedDate)} />
@@ -350,24 +375,41 @@ export default function PaymentDetailModal({ payment, onClose, onAction }) {
             </div>
           ) : (
             <p className="text-sm text-slate-400">
-              {isAccCMG && payment.status === 'Submitted' && payment.invoiceNo
-                ? 'Ready to confirm payment receipt.'
+              {isAccCMG && (payment.status === 'Submitted' || payment.status === 'Income Confirm Pending') && payment.invoiceNo
+                ? mappedStatus === 'Income Confirm Pending'
+                  ? 'Awaiting attachment upload to complete payment.'
+                  : 'Ready to accept payment receipt.'
                 : 'Awaiting payment from client.'}
             </p>
           )}
 
+          {/* Stage 3 — Accept button (Invoice Submitted) */}
           {isAccCMG && payment.status === 'Submitted' && payment.invoiceNo && !payment.receivedDate && (
             <div className="mt-3">
+              <Button variant="primary" size="sm" icon={CheckCircle2} onClick={() => onAction?.('received')}>
+                Accept
+              </Button>
+            </div>
+          )}
+
+          {/* Stage 3.1 — Confirm Receive button (Income Confirm Pending) */}
+          {isAccCMG && payment.status === 'Income Confirm Pending' && !payment.receivedDate && (
+            <div className="mt-3">
               <Button variant="emerald" size="sm" icon={CheckCircle2} onClick={() => onAction?.('received')}>
-                Confirm Receipt
+                Confirm Receive
               </Button>
             </div>
           )}
         </StepSection>
       </div>
 
-      <div className="flex justify-end mt-6 pt-4 border-t border-slate-100">
+      <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100 flex-wrap">
         <Button variant="secondary" onClick={onClose}>Close</Button>
+        {actions && actions.map((a, i) => (
+          <Button key={i} variant={a.variant} onClick={a.onClick}>
+            {a.label}
+          </Button>
+        ))}
       </div>
     </Modal>
   )
@@ -381,6 +423,7 @@ function WorkflowStepper({ payment }) {
   if (mappedStatus === 'Submitted') mappedStatus = 'Invoice Submitted'
   if (mappedStatus === 'Received') mappedStatus = 'Completed'
   if (mappedStatus === 'Invoice PM Approved') mappedStatus = 'Invoice Submitted'
+  // Income Confirm Pending stays as-is
   
   // Define main steps with sub-steps
   const steps = [
@@ -402,7 +445,9 @@ function WorkflowStepper({ payment }) {
     { 
       key: 'step3', 
       label: 'Receive',
-      subSteps: []
+      subSteps: [
+        { key: 'sub4', label: 'Confirm Receive', statuses: ['Income Confirm Pending'] }
+      ]
     },
     { 
       key: 'step4', 
@@ -414,6 +459,7 @@ function WorkflowStepper({ payment }) {
   // Determine current step and sub-step
   const getCurrentStep = () => {
     if (mappedStatus === 'Completed') return { step: 4, subStep: null }
+    if (mappedStatus === 'Income Confirm Pending') return { step: 3, subStep: 1 }
     if (mappedStatus === 'Invoice Submitted') return { step: 3, subStep: 0 }
     if (mappedStatus === 'PM Approved' || mappedStatus === 'Invoice Draft' || 
         mappedStatus === 'Invoice Pending PM' || mappedStatus === 'Invoice PM Rejected' || 
