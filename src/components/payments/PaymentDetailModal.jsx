@@ -1,13 +1,15 @@
+import { useState } from 'react'
 import {
   FileText, User, Calendar, CheckCircle2,
-  Clock, Send, Banknote, XCircle, Hash, AlertCircle, Paperclip
+  Clock, Send, Banknote, XCircle, Hash, AlertCircle, Paperclip, Receipt
 } from 'lucide-react'
 import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
-import { AttachmentLink } from '../ui/AttachmentField'
+import { AttachmentField, AttachmentLink } from '../ui/AttachmentField'
 import { Modal } from './PaymentCreateModal'
+import ReceiptPreviewModal from './ReceiptPreviewModal'
 import { clsx } from 'clsx'
 
 function fmtCurrency(val) {
@@ -30,7 +32,7 @@ function InfoRow({ label, value }) {
 }
 
 export default function PaymentDetailModal({ payment, actions, onClose, onAction }) {
-  const { projects } = useData()
+  const { projects, updatePayment } = useData()
   const { currentUser, USERS, can } = useAuth()
 
   const project = projects.find(p => p.id === payment.projectId)
@@ -59,14 +61,27 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
 
   const isRejected = mappedStatus === 'PM Rejected' || mappedStatus === 'Invoice PM Rejected'
   const isDraft = mappedStatus === 'Draft' || mappedStatus === 'Invoice Draft'
+  const isCompleted = mappedStatus === 'Completed'
+
+  const [showReceipt, setShowReceipt] = useState(false)
+  const [withholdingDoc, setWithholdingDoc] = useState(payment.withholdingTaxDoc || '')
+  const [savingWht, setSavingWht] = useState(false)
+
+  const handleSaveWht = async () => {
+    if (!withholdingDoc) return
+    setSavingWht(true)
+    await updatePayment(payment.id, { withholdingTaxDoc: withholdingDoc })
+    setSavingWht(false)
+  }
 
   return (
-    <Modal
-      title={payment.paymentNo}
-      subtitle={project?.name ?? '—'}
-      onClose={onClose}
-      maxWidth="max-w-4xl"
-    >
+    <>
+      <Modal
+        title={payment.paymentNo}
+        subtitle={project?.name ?? '—'}
+        onClose={onClose}
+        maxWidth="max-w-4xl"
+      >
       <div className="space-y-5">
         {/* Visual 4-Step Stepper */}
         <WorkflowStepper payment={payment} />
@@ -301,6 +316,17 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
             </p>
           )}
 
+          {/* Payment Approved Attachment — uploaded during Create Invoice stage */}
+          {payment.paymentApprovedDoc && (
+            <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+              <Paperclip size={13} className="text-blue-500 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wide">Payment Approved Attachment</p>
+                <AttachmentLink value={payment.paymentApprovedDoc} className="flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 font-medium truncate" />
+              </div>
+            </div>
+          )}
+
           {/* Client Signed Document — shown once invoice has been signed by client */}
           {payment.clientSignedDoc && (
             <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
@@ -355,7 +381,7 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
               <AlertCircle size={14} className="text-amber-500 shrink-0 mt-0.5" />
               <div className="text-xs text-amber-700">
                 <p className="font-semibold">Stage 3.1 — Confirm Receive Pending</p>
-                <p className="mt-0.5">Payment accepted on {fmtDate(payment.acceptedAt)}. กรุณาแนบหลักฐานการรับเงินเพื่อ Complete.</p>
+                <p className="mt-0.5">Payment accepted on {fmtDate(payment.acceptedAt)}. กรุณาออกใบเสร็จรับเงินเพื่อ Complete.</p>
               </div>
             </div>
           )}
@@ -365,10 +391,10 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
               <InfoRow label="Received Date" value={fmtDate(payment.receivedDate)} />
               <InfoRow label="Confirmed By" value={receiver?.name} />
               <InfoRow label="Confirmed On" value={fmtDate(payment.receivedAt)} />
-              {payment.receivedAttachment && (
+              {payment.receiptGeneratedAt && (
                 <InfoRow
-                  label="Receipt / Bank Slip"
-                  value={<AttachmentLink value={payment.receivedAttachment} className="flex items-center gap-1" />}
+                  label="Receipt Generated"
+                  value={fmtDate(payment.receiptGeneratedAt)}
                 />
               )}
               {payment.receivedNote && <InfoRow label="Note" value={`"${payment.receivedNote}"`} />}
@@ -377,7 +403,7 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
             <p className="text-sm text-slate-400">
               {isAccCMG && (payment.status === 'Submitted' || payment.status === 'Income Confirm Pending') && payment.invoiceNo
                 ? mappedStatus === 'Income Confirm Pending'
-                  ? 'Awaiting attachment upload to complete payment.'
+                  ? 'Awaiting receipt generation to complete payment.'
                   : 'Ready to accept payment receipt.'
                 : 'Awaiting payment from client.'}
             </p>
@@ -401,9 +427,57 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
             </div>
           )}
         </StepSection>
+
+        {/* Step 4: Withholding Tax Certificate */}
+        {isCompleted && (
+          <StepSection
+            step={4}
+            title="ใบถูกหัก ณ ที่จ่าย"
+            subtitle="Withholding Tax Certificate"
+            status={mappedStatus}
+            activeStep={4}
+            color="emerald"
+          >
+            {payment.withholdingTaxDoc ? (
+              <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <Paperclip size={13} className="text-emerald-500 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide">Withholding Tax Certificate</p>
+                  <AttachmentLink value={payment.withholdingTaxDoc} className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 font-medium truncate" />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-500">ยังไม่มีใบถูกหัก ณ ที่จ่ายแนบไว้</p>
+                {isAccCMG && (
+                  <div className="space-y-2">
+                    <AttachmentField
+                      value={withholdingDoc}
+                      onChange={setWithholdingDoc}
+                      folder="payments"
+                      docId={payment?.projectId}
+                      uploadedBy={currentUser?.id}
+                      placeholder="Upload withholding tax certificate"
+                    />
+                    {withholdingDoc && (
+                      <Button variant="emerald" size="sm" loading={savingWht} onClick={handleSaveWht}>
+                        Save Attachment
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </StepSection>
+        )}
       </div>
 
       <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100 flex-wrap">
+        {isCompleted && (
+          <Button variant="emerald" size="sm" icon={Receipt} onClick={() => setShowReceipt(true)}>
+            เปิดดูใบเสร็จรับเงิน
+          </Button>
+        )}
         <Button variant="secondary" onClick={onClose}>Close</Button>
         {actions && actions.map((a, i) => (
           <Button key={i} variant={a.variant} onClick={a.onClick}>
@@ -412,6 +486,33 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
         ))}
       </div>
     </Modal>
+
+    {/* View Receipt Modal */}
+    {showReceipt && (
+      <ReceiptPreviewModal
+        payment={payment}
+        project={project}
+        collectionData={{
+          receiptNo: payment.receiptNo || payment.paymentNo || '',
+          paymentType: payment.paymentType || '',
+          cashAmount: payment.cashAmount || '',
+          chequeNo: payment.chequeNo || '',
+          chequeBank: payment.chequeBank || '',
+          chequeBranch: payment.chequeBranch || '',
+          chequeDate: payment.chequeDate || '',
+          transferAmount: payment.transferAmount || '',
+          transferBank: payment.transferBank || '',
+          transferBranch: payment.transferBranch || '',
+          transferDate: payment.transferDate || '',
+          collector: payment.collector || '',
+          collectionDate: payment.collectionDate || '',
+        }}
+        onClose={() => setShowReceipt(false)}
+        onConfirm={() => setShowReceipt(false)}
+        readOnly={true}
+      />
+    )}
+    </>
   )
 }
 

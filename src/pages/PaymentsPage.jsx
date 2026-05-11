@@ -399,6 +399,7 @@ export default function PaymentsPage() {
         <ReceivedModal
           payment={receivedPayment}
           onClose={() => setReceivedPayment(null)}
+          onRequestRevision={() => setRequestRevisionPayment(receivedPayment)}
         />
       )}
       {requestRevisionPayment && (

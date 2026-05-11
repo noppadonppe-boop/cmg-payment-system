@@ -165,16 +165,31 @@ export default function ProjectDetailPage() {
 }
 
 function DetailGeneral({ project, pmUser }) {
+  const clientInfo = project.clientInfo || {}
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
-      <InfoRow label="Project Name" value={project.name} wide />
-      <InfoRow label="Location" value={project.location} />
-      <InfoRow label="Client" value={project.clientName} />
-      <InfoRow label="Project Manager" value={pmUser?.name ?? '—'} />
-      <InfoRow label="Construction Manager" value={project.cm} />
-      <InfoRow label="Main Contractor" value={project.mainContractor} />
-      <InfoRow label="Sub-Contractor" value={project.subContractor} />
-      <InfoRow label="Created" value={fmtDate(project.createdAt)} />
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
+        <InfoRow label="Project Name" value={project.name} wide />
+        <InfoRow label="Location" value={project.location} />
+        <InfoRow label="Client" value={project.clientName} />
+        <InfoRow label="Project Manager" value={pmUser?.name ?? '—'} />
+        <InfoRow label="Construction Manager" value={project.cm} />
+        <InfoRow label="Main Contractor" value={project.mainContractor} />
+        <InfoRow label="Sub-Contractor" value={project.subContractor} />
+        <InfoRow label="Created" value={fmtDate(project.createdAt)} />
+      </div>
+
+      <div className="pt-5 border-t border-slate-200">
+        <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">Client Info</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
+          <InfoRow label="Name" value={clientInfo.name} />
+          <InfoRow label="Address" value={clientInfo.address} />
+          <InfoRow label="Tel" value={clientInfo.tel} />
+          <InfoRow label="Email" value={clientInfo.email} />
+          <InfoRow label="Tax ID" value={clientInfo.taxId} />
+          <InfoRow label="Credit Term" value={clientInfo.creditTerm} />
+        </div>
+      </div>
     </div>
   )
 }

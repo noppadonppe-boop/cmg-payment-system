@@ -302,10 +302,40 @@ export default function ApproveModal({ payment, onClose }) {
           </div>
           <div className="p-4">
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between items-center py-1.5 border-b border-slate-50">
-                <span className="text-slate-500">Claim Value</span>
-                <span className="font-semibold text-slate-800">{fmtCurrency(payment.value)}</span>
-              </div>
+              {(() => {
+                const mainTotal = payment.mainContractItems?.reduce((sum, item) => sum + (item.value || 0), 0) || 0
+                const coaTotal = payment.coaItems?.reduce((sum, coa) => sum + (coa.items?.reduce((s, item) => s + (item.value || 0), 0) || 0), 0) || 0
+                const hasMain = mainTotal > 0
+                const hasCOA = coaTotal > 0
+                const totalClaim = mainTotal + coaTotal + (payment.otherClaim || 0)
+
+                return (
+                  <>
+                    {hasMain && (
+                      <div className="flex justify-between items-center py-1.5 border-b border-slate-50">
+                        <span className="text-slate-500">Claim Value (Main Contract)</span>
+                        <span className="font-semibold text-slate-800">{fmtCurrency(mainTotal)}</span>
+                      </div>
+                    )}
+                    {hasCOA && (
+                      <div className="flex justify-between items-center py-1.5 border-b border-slate-50">
+                        <span className="text-slate-500">Claim Value (COA)</span>
+                        <span className="font-semibold text-slate-800">{fmtCurrency(coaTotal)}</span>
+                      </div>
+                    )}
+                    {payment.otherClaim > 0 && (
+                      <div className="flex justify-between items-center py-1.5 border-b border-slate-50">
+                        <span className="text-slate-500">Other Claim</span>
+                        <span className="font-semibold text-slate-800">{fmtCurrency(payment.otherClaim)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center py-1.5 border-b border-slate-100">
+                      <span className="font-semibold text-slate-700">Total Claim Value</span>
+                      <span className="font-bold text-slate-900">{fmtCurrency(totalClaim)}</span>
+                    </div>
+                  </>
+                )
+              })()}
               {payment.advanceDeduction > 0 && (
                 <div className="flex justify-between items-center py-1.5 border-b border-slate-50">
                   <span className="text-slate-500">Advance Deduction</span>
@@ -346,6 +376,14 @@ export default function ApproveModal({ payment, onClose }) {
               <ReadOnlyField label="Due Date" value={payment.invoiceDueDate} />
               {payment.invoiceNote && (
                 <ReadOnlyField label="Invoice Note" value={payment.invoiceNote} className="col-span-2" />
+              )}
+              {payment.paymentApprovedDoc && (
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-blue-700 mb-1.5">Payment Approved Attachment</label>
+                  <div className="px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm">
+                    <AttachmentLink value={payment.paymentApprovedDoc} className="flex items-center gap-1 text-blue-700 hover:text-blue-900 font-medium" />
+                  </div>
+                </div>
               )}
             </div>
           </div>

@@ -30,6 +30,7 @@ const EMPTY_INSURANCE = { id: '', no: '', name: '', detail: '', type: '', note: 
 
 const EMPTY_FORM = {
   name: '', location: '', pmId: '', cmId: '', cm: '', mainContractor: '', subContractor: '', clientName: '',
+  clientInfo: { name: '', address: '', tel: '', email: '', taxId: '', creditTerm: '' },
   contractNo: '', poNo: '', contractValue: '', contractAttachment: '', startDate: '', finishDate: '',
   contractType: 'Lump Sum', retentionRequired: false, retentionPercent: '', contractNote: '',
   performanceBond: { ...EMPTY_BOND },
@@ -83,6 +84,7 @@ export default function ProjectFormPage() {
           ...project,
           cmId: resolvedCmId,
           contractValue: project.contractValue ?? '',
+          clientInfo: { ...EMPTY_FORM.clientInfo, ...(project.clientInfo || {}) },
           performanceBond: { ...EMPTY_BOND, ...(project.performanceBond || {}) },
           advanceBond:     { ...EMPTY_BOND, ...(project.advanceBond || {}) },
           warrantyBond:    { ...EMPTY_BOND, ...(project.warrantyBond || {}) },
@@ -297,6 +299,10 @@ export default function ProjectFormPage() {
 
 /* ─── Part 1: General ─────────────────────────────────────────────────────── */
 function TabGeneral({ form, set, errors, pmUsers, cmUsers }) {
+  const setClientInfo = (field, value) => {
+    set('clientInfo', { ...form.clientInfo, [field]: value })
+  }
+
   return (
     <div className="space-y-6">
       <SectionTitle title="General Information" subtitle="Basic project and stakeholder details" />
@@ -358,6 +364,58 @@ function TabGeneral({ form, set, errors, pmUsers, cmUsers }) {
             placeholder="e.g. ElectroPower Thailand"
             value={form.subContractor}
             onChange={e => set('subContractor', e.target.value)}
+          />
+        </FormField>
+      </div>
+
+      <SectionTitle title="Client Info" subtitle="Client contact and billing details" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <FormField label="Name">
+          <Input
+            placeholder="e.g. Central Property Group Co., Ltd."
+            value={form.clientInfo?.name || ''}
+            onChange={e => setClientInfo('name', e.target.value)}
+          />
+        </FormField>
+
+        <FormField label="Address">
+          <Input
+            placeholder="e.g. 123 Sukhumvit Rd, Bangkok 10110"
+            value={form.clientInfo?.address || ''}
+            onChange={e => setClientInfo('address', e.target.value)}
+          />
+        </FormField>
+
+        <FormField label="Tel">
+          <Input
+            placeholder="e.g. 02-123-4567"
+            value={form.clientInfo?.tel || ''}
+            onChange={e => setClientInfo('tel', e.target.value)}
+          />
+        </FormField>
+
+        <FormField label="Email">
+          <Input
+            type="email"
+            placeholder="e.g. accounting@centralproperty.com"
+            value={form.clientInfo?.email || ''}
+            onChange={e => setClientInfo('email', e.target.value)}
+          />
+        </FormField>
+
+        <FormField label="Tax ID">
+          <Input
+            placeholder="e.g. 0105530001234"
+            value={form.clientInfo?.taxId || ''}
+            onChange={e => setClientInfo('taxId', e.target.value)}
+          />
+        </FormField>
+
+        <FormField label="Credit Term">
+          <Input
+            placeholder="e.g. 30 days, 45 days"
+            value={form.clientInfo?.creditTerm || ''}
+            onChange={e => setClientInfo('creditTerm', e.target.value)}
           />
         </FormField>
       </div>
