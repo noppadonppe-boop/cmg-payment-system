@@ -101,7 +101,7 @@ export default function ReceiptPreviewModal({ payment, project, collectionData =
   const contractNoString = contractNos.join(', ')
 
   const receiptNo = payment.invoiceNo || payment.paymentNo || '—'
-  const receiptDate = fmtDate(payment.invoiceDate || new Date().toISOString())
+  const receiptDate = fmtDate(cd.collectionDate || payment.invoiceDate || new Date().toISOString())
 
   // Build description lines
   const descLines = []
@@ -124,37 +124,39 @@ export default function ReceiptPreviewModal({ payment, project, collectionData =
     >
       <div className="space-y-4">
         {/* Receipt Paper */}
-        <div className="bg-white border border-slate-300 p-6 sm:p-8 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none">
+        <div className="print-area bg-white border border-slate-300 p-6 sm:p-8 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none">
 
-          {/* ── Title + Receipt No. ── */}
-          <div className="mb-3">
-            <h1 className="text-center text-lg font-bold leading-tight">
-              ใบเสร็จรับเงิน / ใบกำกับภาษี <span className="text-red-600">(Original)</span>
-            </h1>
-            <p className="text-center text-xs font-semibold tracking-widest mt-0.5">RECEIPT / TAX INVOICE</p>
-            <div className="flex items-center mt-2 text-xs">
-              <span className="text-slate-600">เลขที่</span>
-              <span className="font-semibold text-slate-800 ml-2">{receiptNo}</span>
+          {/* ── Header: Logo + Title ── */}
+          <div className="flex justify-between items-start mb-2">
+            {/* Logo */}
+            <div className="w-28 h-16 shrink-0 flex items-center justify-start">
+              <img src="/logo.png" alt="CMG Logo" className="max-w-full max-h-full object-contain" />
             </div>
+            
+            {/* Title */}
+            <div className="flex-1 text-center pt-2">
+              <h1 className="text-xl font-bold leading-tight">
+                ใบเสร็จรับเงิน / ใบกำกับภาษี <span className="text-red-600">(Original)</span>
+              </h1>
+              <p className="text-sm font-semibold tracking-widest mt-0.5">RECEIPT / TAX INVOICE</p>
+            </div>
+            
+            {/* Spacer for centering */}
+            <div className="w-28 h-16 shrink-0 invisible"></div>
           </div>
+
 
           {/* ── Company Box + Tax Rate / Date ── */}
           <div className="flex gap-3 mb-3">
             {/* Company Info Box */}
             <div className="border border-slate-800 p-2 flex-1">
-              <div className="flex items-start gap-2">
-                {/* CMG Logo */}
-                <div className="w-14 h-10 bg-red-600 text-white flex items-center justify-center text-[10px] font-bold rounded-sm shrink-0 leading-tight text-center">
-                  CMG<br/>Logo
-                </div>
-                <div className="text-[10px] leading-tight">
-                  <p className="font-bold text-slate-900">CMG ENGINEERING & CONSTRUCTION CO.,LTD</p>
-                  <p className="text-slate-800">บริษัท ซีเอ็มจี เอ็นจิเนียริ่ง แอนด์ คอนสตรัคชั่น จำกัด</p>
-                  <p className="text-slate-800">(สำนักงานใหญ่) 4/281 หมู่ 3 ตำบลนาพระ</p>
-                  <p className="text-slate-800">อำเภอเมืองระยอง จังหวัดระยอง 21000</p>
-                  <p className="text-slate-800">Tel : 033-680588&nbsp;&nbsp;&nbsp;FAX : 033-680588</p>
-                  <p className="text-slate-800">TAX ID : 0215557001784</p>
-                </div>
+              <div className="text-[10px] leading-tight">
+                <p className="font-bold text-slate-900">CMG ENGINEERING & CONSTRUCTION CO.,LTD</p>
+                <p className="text-slate-800">บริษัท ซีเอ็มจี เอ็นจิเนียริ่ง แอนด์ คอนสตรัคชั่น จำกัด</p>
+                <p className="text-slate-800">(สำนักงานใหญ่) 4/281 หมู่ 3 ตำบลนาพระ</p>
+                <p className="text-slate-800">อำเภอเมืองระยอง จังหวัดระยอง 21000</p>
+                <p className="text-slate-800">Tel : 033-680588&nbsp;&nbsp;&nbsp;FAX : 033-680588</p>
+                <p className="text-slate-800">TAX ID : 0215557001784</p>
               </div>
             </div>
 
@@ -163,7 +165,7 @@ export default function ReceiptPreviewModal({ payment, project, collectionData =
               {/* Row 1: เลขที่ */}
               <div className="grid grid-cols-[1fr_auto] items-center gap-2 mb-1">
                 <span className="text-slate-600">เลขที่</span>
-                <span className="font-bold text-slate-800 text-[11px]">{cd.receiptNo || '—'}</span>
+                <span className="font-bold text-slate-800 text-[11px]">{receiptNo}</span>
               </div>
               {/* Row 2: อัตราภาษี */}
               <div className="flex items-center justify-between gap-1 mb-1 whitespace-nowrap">
@@ -264,13 +266,6 @@ export default function ReceiptPreviewModal({ payment, project, collectionData =
             <div className="w-48 text-[10px]">
               <div className="flex justify-between items-center border-b border-slate-300 py-1 px-2">
                 <span className="text-slate-600">ราคาสินค้ารวม</span>
-                <span className="font-semibold text-slate-800">{fmtCurrency(claimValue)}</span>
-              </div>
-              <div className="flex justify-between items-center border-b border-slate-300 py-1 px-2">
-                <div>
-                  <span className="text-slate-600">จำนวนเงินรวมทั้งสิ้น</span>
-                  <span className="text-slate-500 text-[9px] ml-1">Total</span>
-                </div>
                 <span className="font-semibold text-slate-800">{fmtCurrency(claimValue)}</span>
               </div>
               <div className="flex justify-between items-center border-b border-slate-300 py-1 px-2">

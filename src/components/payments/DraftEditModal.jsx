@@ -69,31 +69,31 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
   // Claim type state - Load from payment
   const [claimMainContract, setClaimMainContract] = useState(payment?.claimMainContract || false)
   const [claimCOA, setClaimCOA] = useState(payment?.claimCOA || false)
-  
+
   // Main contract items state - Load from payment
   const [mainContractItems, setMainContractItems] = useState(
     payment?.mainContractItems && payment.mainContractItems.length > 0
       ? payment.mainContractItems.map((item, idx) => ({
-          id: Date.now() + idx,
-          no: item.no,
-          description: item.description,
-          value: String(item.value)
-        }))
+        id: Date.now() + idx,
+        no: item.no,
+        description: item.description,
+        value: String(item.value)
+      }))
       : [{ id: Date.now(), no: '1', description: '', value: '' }]
   )
-  
+
   // COA items state - Load from payment
   const [coaItems, setCoaItems] = useState(
     payment?.coaItems && payment.coaItems.length > 0
       ? payment.coaItems.map((coaItem, idx) => ({
-          coaId: coaItem.coaId,
-          items: coaItem.items.map((item, itemIdx) => ({
-            id: Date.now() + idx * 1000 + itemIdx,
-            no: item.no,
-            description: item.description,
-            value: String(item.value)
-          }))
+        coaId: coaItem.coaId,
+        items: coaItem.items.map((item, itemIdx) => ({
+          id: Date.now() + idx * 1000 + itemIdx,
+          no: item.no,
+          description: item.description,
+          value: String(item.value)
         }))
+      }))
       : []
   )
 
@@ -109,11 +109,11 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
   // Calculate max allowed value based on claim type
   const getMaxAllowedValue = () => {
     let maxValue = 0
-    
+
     if (claimMainContract && currentProject) {
       maxValue += currentProject.originalContractValue || currentProject.contractValue || 0
     }
-    
+
     if (claimCOA && coaItems.length > 0) {
       coaItems.forEach(coaItem => {
         const coa = projectCOAs.find(c => c.id === coaItem.coaId)
@@ -122,18 +122,18 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
         }
       })
     }
-    
+
     return maxValue || Infinity
   }
 
   // Add main contract item
   const addMainContractItem = () => {
     const newNo = mainContractItems.length + 1
-    setMainContractItems([...mainContractItems, { 
-      id: Date.now(), 
-      no: String(newNo), 
-      description: '', 
-      value: '' 
+    setMainContractItems([...mainContractItems, {
+      id: Date.now(),
+      no: String(newNo),
+      description: '',
+      value: ''
     }])
   }
 
@@ -148,7 +148,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
 
   // Update main contract item
   const updateMainContractItem = (id, field, value) => {
-    setMainContractItems(items => 
+    setMainContractItems(items =>
       items.map(item => item.id === id ? { ...item, [field]: value } : item)
     )
   }
@@ -170,18 +170,18 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
   // Calculate grand total from all sources
   const calculateGrandTotal = () => {
     let total = 0
-    
+
     if (claimMainContract) {
       total += calculateMainContractTotal()
     }
-    
+
     if (claimCOA) {
       total += calculateAllCOATotal()
     }
-    
+
     // Add Other Claim
     total += parseCurrency(form.otherClaim)
-    
+
     return total
   }
 
@@ -206,10 +206,10 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
   // Calculate advance deduction amount
   const calculateAdvanceDeduction = () => {
     if (!useAdvanceDeduction || !advanceDeductionValue) return 0
-    
+
     const base = getAdvanceDeductionBase()
     const value = parseCurrency(advanceDeductionValue)
-    
+
     if (advanceDeductionType === 'percentage') {
       return (base * value) / 100
     }
@@ -219,11 +219,11 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
   // Calculate retention reduce amount
   const calculateRetentionReduce = () => {
     if (!useRetentionReduce || !retentionReduceValue) return 0
-    
+
     // คำนวณจาก Total Claim Value (หลังหัก Advance)
     const base = getRetentionReduceBase()
     const value = parseCurrency(retentionReduceValue)
-    
+
     if (retentionReduceType === 'percentage') {
       return (base * value) / 100
     }
@@ -233,7 +233,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
   // Add COA selection
   const addCOASelection = (coaId) => {
     if (!coaId || coaItems.some(item => item.coaId === coaId)) return
-    
+
     setCoaItems([...coaItems, {
       coaId,
       items: [{ id: Date.now(), no: '1', description: '', value: '' }]
@@ -252,11 +252,11 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
         const newNo = coaItem.items.length + 1
         return {
           ...coaItem,
-          items: [...coaItem.items, { 
-            id: Date.now(), 
-            no: String(newNo), 
-            description: '', 
-            value: '' 
+          items: [...coaItem.items, {
+            id: Date.now(),
+            no: String(newNo),
+            description: '',
+            value: ''
           }]
         }
       }
@@ -284,7 +284,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
       if (coaItem.coaId === coaId) {
         return {
           ...coaItem,
-          items: coaItem.items.map(item => 
+          items: coaItem.items.map(item =>
             item.id === itemId ? { ...item, [field]: value } : item
           )
         }
@@ -297,7 +297,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
   const calculateCOATotal = (coaId) => {
     const coaItem = coaItems.find(item => item.coaId === coaId)
     if (!coaItem) return 0
-    
+
     return coaItem.items.reduce((sum, item) => {
       return sum + parseCurrency(item.value)
     }, 0)
@@ -313,10 +313,10 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
   const grandTotal = calculateGrandTotal()
   const adv = calculateAdvanceDeduction()
   const totalClaimValue = grandTotal - adv // Total Claim Value หลังหัก Advance
-  
+
   const ret = calculateRetentionReduce()
   const withTaxPercent = parseCurrency(form.withTaxPercent)
-  
+
   // Calculate balance: (Total Claim Value × 1.07) - Retention - With Tax
   // Note: ส่ง totalClaimValue ไปให้ calculatePaymentBalance แทน grandTotal
   // และส่ง advanceDeduction = 0 เพราะหักไปแล้ว
@@ -324,29 +324,29 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
 
   const validate = () => {
     const errs = {}
-    if (!form.projectId)        errs.projectId = 'Select a project'
+    if (!form.projectId) errs.projectId = 'Select a project'
     if (!form.paymentNo.trim()) errs.paymentNo = 'Payment number is required'
-    if (!form.detail.trim())    errs.detail    = 'Description is required'
-    
+    if (!form.detail.trim()) errs.detail = 'Description is required'
+
     // Validate claim type selection
     if (!claimMainContract && !claimCOA) {
       errs.claimType = 'Please select at least one claim type (Main Contract or COA)'
     }
-    
+
     // Validate main contract items
     if (claimMainContract) {
       const hasEmptyItems = mainContractItems.some(item => !item.description.trim() || !item.value || parseCurrency(item.value) <= 0)
       if (hasEmptyItems) {
         errs.mainContractItems = 'All main contract items must have description and value'
       }
-      
+
       const total = calculateMainContractTotal()
       const maxValue = currentProject?.originalContractValue || currentProject?.contractValue || 0
       if (total > maxValue) {
         errs.mainContractValue = `Total claim value (฿${total.toLocaleString()}) exceeds Main Contract Value (฿${maxValue.toLocaleString()})`
       }
     }
-    
+
     // Validate COA selections and items
     if (claimCOA) {
       if (coaItems.length === 0) {
@@ -356,11 +356,11 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
         coaItems.forEach(coaItem => {
           const coa = projectCOAs.find(c => c.id === coaItem.coaId)
           const hasEmptyItems = coaItem.items.some(item => !item.description.trim() || !item.value || parseCurrency(item.value) <= 0)
-          
+
           if (hasEmptyItems) {
             errs[`coaItems_${coaItem.coaId}`] = `All items in ${coa?.coaNo || 'COA'} must have description and value`
           }
-          
+
           const total = calculateCOATotal(coaItem.coaId)
           const maxValue = coa?.value || 0
           if (total > maxValue) {
@@ -369,13 +369,13 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
         })
       }
     }
-    
+
     // Update form value with grand total
     const grandTotal = calculateGrandTotal()
     if (grandTotal <= 0) {
       errs.value = 'Total claim value must be greater than 0'
     }
-    
+
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -383,58 +383,58 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
   const handleSubmit = async () => {
     if (!validate() || !payment?.id) return
     setSaving(true)
-    
+
     try {
       await new Promise(r => setTimeout(r, 350))
-      
+
       // Calculate grand total
       const grandTotal = calculateGrandTotal()
-      
+
       // Calculate deductions
       const finalAdvanceDeduction = calculateAdvanceDeduction()
       const totalClaimValue = grandTotal - finalAdvanceDeduction // Total Claim Value หลังหัก Advance
-      
+
       const finalRetentionReduce = calculateRetentionReduce()
-      
+
       // Recalculate financial values based on Total Claim Value
       const finalValue = totalClaimValue
       const finalAdv = finalAdvanceDeduction
       const finalRet = finalRetentionReduce
       const finalWithTaxPercent = parseCurrency(form.withTaxPercent)
-      
+
       // Calculate balance: (Total Claim Value × 1.07) - Retention - With Tax
-      const { grossClaim: finalGrossClaim, withTaxAmount: finalWithTaxAmount, balanceValue: finalBalance } = 
+      const { grossClaim: finalGrossClaim, withTaxAmount: finalWithTaxAmount, balanceValue: finalBalance } =
         calculatePaymentBalance(finalValue, 0, finalRet, finalWithTaxPercent)
-      
+
       const today = new Date().toISOString().split('T')[0]
-      
+
       // Prepare payment data
       const paymentData = {
-        projectId:        form.projectId,
-        type:             claimMainContract ? 'main' : 'coa',
-        paymentNo:        form.paymentNo,
-        detail:           form.detail,
-        value:            finalValue,
-        otherClaim:       parseCurrency(form.otherClaim),
+        projectId: form.projectId,
+        type: claimMainContract ? 'main' : 'coa',
+        paymentNo: form.paymentNo,
+        detail: form.detail,
+        value: finalValue,
+        otherClaim: parseCurrency(form.otherClaim),
         advanceDeduction: finalAdv,
         advanceDeductionType: useAdvanceDeduction ? advanceDeductionType : null,
         advanceDeductionValue: useAdvanceDeduction ? parseCurrency(advanceDeductionValue) : null,
         advanceDeductionSources: useAdvanceDeduction ? advanceDeductionSources : null,
-        retentionReduce:  finalRet,
+        retentionReduce: finalRet,
         retentionReduceType: useRetentionReduce ? retentionReduceType : null,
         retentionReduceValue: useRetentionReduce ? parseCurrency(retentionReduceValue) : null,
-        withTaxPercent:   finalWithTaxPercent,
-        withTaxValue:     finalWithTaxAmount,
-        grossClaimValue:  finalGrossClaim,
-        balanceValue:     finalBalance,
-        attachment:       form.attachment,
-        note:             form.note,
-        status:           'Pending PM', // Changed from 'In Progress' to 'Pending PM' when submitted
-        createdAt:        today, // Update submission date
+        withTaxPercent: finalWithTaxPercent,
+        withTaxValue: finalWithTaxAmount,
+        grossClaimValue: finalGrossClaim,
+        balanceValue: finalBalance,
+        attachment: form.attachment,
+        note: form.note,
+        status: 'Pending PM', // Changed from 'In Progress' to 'Pending PM' when submitted
+        createdAt: today, // Update submission date
         claimMainContract: claimMainContract,
-        claimCOA:         claimCOA,
+        claimCOA: claimCOA,
       }
-      
+
       // Add claim-specific data
       if (claimMainContract) {
         paymentData.mainContractItems = mainContractItems.map(item => ({
@@ -443,7 +443,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
           value: parseCurrency(item.value)
         }))
       }
-      
+
       if (claimCOA) {
         paymentData.coaItems = coaItems.map(coaItem => {
           const coa = projectCOAs.find(c => c.id === coaItem.coaId)
@@ -458,7 +458,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
           }
         })
       }
-      
+
       await updatePayment(payment.id, paymentData)
       setSaving(false)
       onSaved?.()
@@ -522,7 +522,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
             {errors.claimType && (
               <div className="text-xs text-rose-600 font-medium">{errors.claimType}</div>
             )}
-            
+
             {/* Claim Main Contract Checkbox */}
             <div className="space-y-2">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -547,7 +547,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
                       </span>
                     </div>
                   )}
-                  
+
                   {errors.mainContractItems && (
                     <div className="text-xs text-rose-600 font-medium">{errors.mainContractItems}</div>
                   )}
@@ -655,12 +655,12 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
                       {errors.selectedCOA && (
                         <div className="text-xs text-rose-600 font-medium">{errors.selectedCOA}</div>
                       )}
-                      
+
                       {/* COA Selection Dropdown */}
                       <FormField label="Select COA to add">
                         <div className="flex gap-2">
-                          <Select 
-                            value="" 
+                          <Select
+                            value=""
                             onChange={(e) => {
                               if (e.target.value) {
                                 addCOASelection(e.target.value)
@@ -826,7 +826,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
                       />
                       <span className="text-xs font-medium text-slate-600">Enable Advance Deduction</span>
                     </label>
-                    
+
                     {useAdvanceDeduction ? (
                       <>
                         {/* Source Selection */}
@@ -854,14 +854,14 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
                         </div>
 
                         {/* Type Dropdown */}
-                        <Select 
-                          value={advanceDeductionType} 
+                        <Select
+                          value={advanceDeductionType}
                           onChange={(e) => setAdvanceDeductionType(e.target.value)}
                         >
                           <option value="percentage">Percentage (%)</option>
                           <option value="amount">Amount (฿)</option>
                         </Select>
-                        
+
                         {/* Input Field */}
                         {advanceDeductionType === 'percentage' ? (
                           <div className="relative">
@@ -886,7 +886,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
                             />
                           </div>
                         )}
-                        
+
                         {/* Show calculated amount */}
                         {advanceDeductionValue && (
                           <div className="text-xs text-slate-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">
@@ -988,18 +988,18 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
                     />
                     <span className="text-xs font-medium text-slate-600">Enable Retention Reduce</span>
                   </label>
-                  
+
                   {useRetentionReduce ? (
                     <>
                       {/* Type Dropdown */}
-                      <Select 
-                        value={retentionReduceType} 
+                      <Select
+                        value={retentionReduceType}
                         onChange={(e) => setRetentionReduceType(e.target.value)}
                       >
                         <option value="percentage">Percentage (%)</option>
                         <option value="amount">Amount (฿)</option>
                       </Select>
-                      
+
                       {/* Input Field */}
                       {retentionReduceType === 'percentage' ? (
                         <div className="relative">
@@ -1024,7 +1024,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
                           />
                         </div>
                       )}
-                      
+
                       {/* Show calculated amount */}
                       {retentionReduceValue && (
                         <div className="text-xs text-slate-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">

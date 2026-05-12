@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   Plus, ChevronDown, GitPullRequest, CheckCircle2, Clock,
   AlertCircle, XCircle, ArrowRight, FileText, User,
-  Calendar, Banknote, Eye, GitMerge, CreditCard, Trash2
+  Calendar, Banknote, Eye, GitMerge, CreditCard, Trash2, Edit, Upload
 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { useAuth } from '../context/AuthContext'
@@ -14,6 +14,7 @@ import CORCreateModal from '../components/changeorders/CORCreateModal'
 import CORDetailModal from '../components/changeorders/CORDetailModal'
 import ConvertToCOAModal from '../components/changeorders/ConvertToCOAModal'
 import COAPaymentModal from '../components/changeorders/COAPaymentModal'
+import COAStampUploadModal from '../components/changeorders/COAStampUploadModal'
 
 export const COR_STATUS_CONFIG = {
   'Prepare doc': { badge: 'slate',   icon: Clock,        label: 'Prepare Doc'  },
@@ -50,11 +51,14 @@ export default function ChangeOrdersPage() {
   const [tab, setTab]                 = useState('cor')  // 'cor' | 'coa'
   const [createCOROpen, setCreateCOROpen]   = useState(false)
   const [detailCOR, setDetailCOR]           = useState(null)
+  const [editCOR, setEditCOR]               = useState(null)
   const [convertCOR, setConvertCOR]         = useState(null)
   const [coaPaymentCOA, setCoaPaymentCOA]   = useState(null)
+  const [stampUploadCOA, setStampUploadCOA] = useState(null)
 
-  const isPM    = can('canApprovePayments')
-  const isQsEng = can('canCreateClaims')
+  const isPM     = can('canApprovePayments')
+  const isQsEng  = can('canCreateClaims')
+  const isAccCMG = can('canUpdateBonds')
 
   const visibleProjects = projects.filter(p => hasProjectAccess(p.id))
 
@@ -79,6 +83,7 @@ export default function ChangeOrdersPage() {
     submitted:  allCORs.filter(c => c.status === 'Submitted').length,
     converted:  allCORs.filter(c => c.convertedToCOA).length,
     totalCOA:   allCOAs.length,
+    stampCompleted: allCOAs.filter(c => c.stampUploadedAt).length,
     totalCOAValue: allCOAs.reduce((s, c) => s + (c.value || 0), 0),
   }
 
@@ -96,7 +101,7 @@ export default function ChangeOrdersPage() {
           { label: 'Submitted',     value: stats.submitted,  color: 'text-blue-700',    bg: 'bg-blue-50'    },
           { label: 'Converted→COA', value: stats.converted,  color: 'text-emerald-700', bg: 'bg-emerald-50' },
           { label: 'Total COAs',    value: stats.totalCOA,   color: 'text-purple-700',  bg: 'bg-purple-50'  },
-          { label: 'Total COA Value', value: fmtCurrency(stats.totalCOAValue), color: 'text-emerald-700', bg: 'bg-emerald-50' },
+          { label: 'Stamp Completed', value: stats.stampCompleted, color: 'text-emerald-800', bg: 'bg-emerald-100' },
         ].map(s => (
           <Card key={s.label} className={clsx('!p-4', s.bg, '!border-0')}>
             <p className="text-xs text-slate-500 font-medium leading-tight">{s.label}</p>
@@ -180,8 +185,10 @@ export default function ChangeOrdersPage() {
                   sc={sc}
                   coa={coa}
                   canConvert={isPM && !cor.convertedToCOA && cor.status === 'Submitted'}
+                  canEdit={isQsEng && cor.status === 'Prepare doc'}
                   canDelete={isSuperAdmin}
                   onView={() => setDetailCOR(cor)}
+                  onEdit={() => setEditCOR(cor)}
                   onConvert={() => setConvertCOR(cor)}
                   onDelete={() => handleDeleteCOR(cor)}
                 />
@@ -217,7 +224,9 @@ export default function ChangeOrdersPage() {
                   payments={coaPays}
                   currentUser={currentUser}
                   canDelete={isSuperAdmin}
+                  canUploadStamp={isAccCMG}
                   onManagePayment={() => setCoaPaymentCOA(coa)}
+                  onUploadStamp={() => setStampUploadCOA(coa)}
                   onDelete={() => handleDeleteCOA(coa)}
                 />
               )
@@ -233,10 +242,18 @@ export default function ChangeOrdersPage() {
           onClose={() => setCreateCOROpen(false)}
         />
       )}
+      {editCOR && (
+        <CORCreateModal
+          projects={visibleProjects}
+          cor={editCOR}
+          onClose={() => setEditCOR(null)}
+        />
+      )}
       {detailCOR && (
         <CORDetailModal
           cor={detailCOR}
           onClose={() => setDetailCOR(null)}
+          onEdit={() => { setDetailCOR(null); setEditCOR(detailCOR) }}
           onConvert={() => { setDetailCOR(null); setConvertCOR(detailCOR) }}
         />
       )}
@@ -253,12 +270,18 @@ export default function ChangeOrdersPage() {
           onClose={() => setCoaPaymentCOA(null)}
         />
       )}
+      {stampUploadCOA && (
+        <COAStampUploadModal
+          coa={stampUploadCOA}
+          onClose={() => setStampUploadCOA(null)}
+        />
+      )}
     </div>
   )
 }
 
 /* ─── COR Row ─────────────────────────────────────────────────────────────── */
-function CORRow({ cor, project, creator, sc, coa, canConvert, canDelete, onView, onConvert, onDelete }) {
+function CORRow({ cor, project, creator, sc, coa, canConvert, canEdit, canDelete, onView, onEdit, onConvert, onDelete }) {
   const StatusIcon = sc.icon
   return (
     <Card padding={false} className="overflow-hidden hover:shadow-md transition-shadow">
@@ -315,6 +338,14 @@ function CORRow({ cor, project, creator, sc, coa, canConvert, canDelete, onView,
                 >
                   <Eye size={13} /> Detail
                 </button>
+                {canEdit && (
+                  <button
+                    onClick={onEdit}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                  >
+                    <Edit size={13} /> Edit
+                  </button>
+                )}
                 {canConvert && (
                   <Button variant="primary" size="sm" icon={GitMerge} onClick={onConvert}>
                     Convert to COA
@@ -339,7 +370,7 @@ function CORRow({ cor, project, creator, sc, coa, canConvert, canDelete, onView,
 }
 
 /* ─── COA Row ─────────────────────────────────────────────────────────────── */
-function COARow({ coa, cor, project, approver, payments, currentUser, canDelete, onManagePayment, onDelete }) {
+function COARow({ coa, cor, project, approver, payments, currentUser, canDelete, canUploadStamp, onManagePayment, onUploadStamp, onDelete }) {
   const latestPay   = payments[payments.length - 1]
   const totalPaid   = payments.filter(p => p.status === 'Received').reduce((s, p) => s + (p.balanceValue || 0), 0)
   const balance     = (coa.value || 0) - totalPaid
@@ -349,13 +380,22 @@ function COARow({ coa, cor, project, approver, payments, currentUser, canDelete,
   return (
     <Card padding={false} className="overflow-hidden hover:shadow-md transition-shadow">
       <div className="flex">
-        <div className="w-1 shrink-0 bg-purple-500" />
+        <div className={clsx(
+          'w-1 shrink-0',
+          coa.stampUploadedAt ? 'bg-emerald-500' : 'bg-purple-500'
+        )} />
         <div className="flex-1 py-2 px-3 sm:py-2.5 sm:px-4">
           <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-4">
             <div className="flex-1 min-w-0 space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[13px] font-bold text-slate-800">{coa.coaNo}</span>
                 <Badge variant="purple" className="scale-90 origin-left">COA Approved</Badge>
+                {coa.stampUploadedAt && (
+                  <Badge variant="emerald" className="scale-90 origin-left">
+                    <CheckCircle2 size={10} className="mr-1 inline" />
+                    Stamp Completed
+                  </Badge>
+                )}
                 {cor && (
                   <span className="text-[10px] text-slate-400 flex items-center gap-1">
                     <GitPullRequest size={10} /> from {cor.corNo}
@@ -395,6 +435,16 @@ function COARow({ coa, cor, project, approver, payments, currentUser, canDelete,
                 {canAct && (
                   <Button variant="secondary" size="sm" icon={CreditCard} onClick={onManagePayment}>
                     Payments
+                  </Button>
+                )}
+                {canUploadStamp && (
+                  <Button 
+                    variant={coa.stampUploadedAt ? "emerald" : "primary"} 
+                    size="sm" 
+                    icon={coa.stampUploadedAt ? CheckCircle2 : Upload} 
+                    onClick={onUploadStamp}
+                  >
+                    {coa.stampUploadedAt ? 'Stamp Done' : 'Upload Stamp'}
                   </Button>
                 )}
                 {canDelete && (

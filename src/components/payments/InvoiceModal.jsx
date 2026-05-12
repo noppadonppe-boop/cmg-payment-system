@@ -127,36 +127,32 @@ export default function InvoiceModal({ payment, onClose }) {
   }
 
   const invoicePreview = (
-    <div className="bg-white border border-slate-300 p-4 sm:p-6 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none text-[10px] sm:text-[11px] leading-tight">
-      {/* ── Header ── */}
+    <div className="print-area bg-white border border-slate-300 p-4 sm:p-6 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none text-[10px] sm:text-[11px] leading-tight">
+      {/* ── Header: Logo + Title ── */}
       <div className="flex justify-between items-start mb-2">
-        <div className="flex items-start gap-2">
-          {/* CMG Logo placeholder */}
-          <div className="w-16 h-12 border-2 border-red-600 text-red-600 flex flex-col items-center justify-center text-[10px] font-bold shrink-0 leading-none">
-            <span className="text-lg">CMG</span>
-            <span className="text-[6px] text-center px-1">Engineering &amp; Construction Co.,Ltd.</span>
+        {/* Left: Logo & Address */}
+        <div className="flex gap-4">
+          {/* CMG Logo */}
+          <div className="w-28 h-16 shrink-0 flex items-center justify-start">
+            <img src="/logo.png" alt="CMG Logo" className="max-w-full max-h-full object-contain" />
           </div>
-          <div className="text-[10px] leading-tight">
-            <p className="font-bold text-blue-700">CMG ENGINEERING&amp; CONSTRUCTION CO.,LTD</p>
-            <p className="text-blue-700">4/281 Moo 3, Nempra Mueang, Rayong District, Rayong Province 21000</p>
+          <div className="text-[10px] leading-tight pt-2">
+            <p className="font-bold text-blue-700 text-[11px]">CMG ENGINEERING&amp; CONSTRUCTION CO.,LTD</p>
+            <p className="text-blue-700 mt-0.5">4/281 Moo 3, Nempra Mueang, Rayong District, Rayong Province 21000</p>
             <p className="text-blue-700">Tel 033-680588 Fax 033-680588</p>
+            <p className="text-slate-800 mt-0.5">CMG TAX ID: <span className="font-semibold">0215557001784</span></p>
           </div>
         </div>
-        <div className="text-[8px] text-slate-500 text-right">
-          <p>FRM-CMG-AC-011</p>
-        </div>
-      </div>
 
-      <div className="flex justify-end mb-2">
-        <div className="text-[10px] text-right">
-          <p>CMG TAX ID:</p>
-          <p className="font-semibold">0215557001784</p>
+        {/* Right: FRM-CMG */}
+        <div className="text-[8px] text-slate-500 text-right pt-2">
+          <p>FRM-CMG-AC-011</p>
         </div>
       </div>
 
       {/* ── Title ── */}
       <div className="text-center mb-4">
-        <h1 className="text-base font-bold">
+        <h1 className="text-xl font-bold">
           INVOICE <span className="text-red-600">(Original)</span>
         </h1>
       </div>

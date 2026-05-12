@@ -414,6 +414,10 @@ export function DataProvider({ children }) {
     return newCOA
   }
 
+  const updateCOA = async (id, updates) => {
+    await updateDoc(docRef('coas', id), updates)
+  }
+
   const deleteCOA = async (id) => {
     await deleteDoc(docRef('coas', id))
   }
@@ -425,7 +429,7 @@ export function DataProvider({ children }) {
       bondStatuses, getBondStatus, updateBondStatus,
       payments, getProjectPayments, addPayment, updatePayment, deletePayment,
       cors, getProjectCORs, addCOR, updateCOR, deleteCOR,
-      coas, getProjectCOAs, addCOA, deleteCOA,
+      coas, getProjectCOAs, addCOA, updateCOA, deleteCOA,
     }}>
       {children}
     </DataContext.Provider>

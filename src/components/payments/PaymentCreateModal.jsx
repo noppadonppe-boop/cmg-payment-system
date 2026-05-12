@@ -66,6 +66,7 @@ export default function PaymentCreateModal({ projects, onClose }) {
   const [useRetentionReduce, setUseRetentionReduce] = useState(false)
   const [retentionReduceType, setRetentionReduceType] = useState('percentage') // 'amount' or 'percentage'
   const [retentionReduceValue, setRetentionReduceValue] = useState('')
+  const [retentionReduceTiming, setRetentionReduceTiming] = useState('after') // 'before' or 'after' VAT
 
   // Claim type state
   const [claimMainContract, setClaimMainContract] = useState(false)
@@ -87,6 +88,65 @@ export default function PaymentCreateModal({ projects, onClose }) {
   // Get current project and its COAs
   const currentProject = projects.find(p => p.id === form.projectId)
   const projectCOAs = form.projectId ? getProjectCOAs(form.projectId) : []
+
+  // Calculate Main Contract Balance
+  const calculateMainContractBalance = () => {
+    if (!currentProject || !form.projectId) return 0
+    
+    const mainContractValue = currentProject.originalContractValue || currentProject.contractValue || 0
+    
+    // Get all payments for this project that claim main contract
+    const mainContractPayments = payments.filter(payment => 
+      payment.projectId === form.projectId && 
+      payment.claimMainContract === true &&
+      payment.status !== 'Rejected' // Exclude rejected payments
+    )
+    
+    // Sum up the main contract claim values from existing payments
+    const totalClaimed = mainContractPayments.reduce((sum, payment) => {
+      if (payment.mainContractItems && payment.mainContractItems.length > 0) {
+        // If has mainContractItems, sum them up
+        return sum + payment.mainContractItems.reduce((itemSum, item) => itemSum + (item.value || 0), 0)
+      } else if (payment.claimMainContract && payment.value) {
+        // If claims main contract but no items breakdown, use total value
+        return sum + (payment.value || 0)
+      }
+      return sum
+    }, 0)
+    
+    return Math.max(0, mainContractValue - totalClaimed)
+  }
+
+  // Calculate COA Balance for specific COA
+  const calculateCOABalance = (coaId) => {
+    if (!form.projectId || !coaId) return 0
+    
+    const coa = projectCOAs.find(c => c.id === coaId)
+    if (!coa) return 0
+    
+    const coaValue = coa.value || 0
+    
+    // Get all payments for this project that claim this specific COA
+    const coaPayments = payments.filter(payment => 
+      payment.projectId === form.projectId && 
+      payment.claimCOA === true &&
+      payment.status !== 'Rejected' && // Exclude rejected payments
+      payment.coaItems && payment.coaItems.some(coaItem => coaItem.coaId === coaId)
+    )
+    
+    // Sum up the COA claim values from existing payments
+    const totalClaimed = coaPayments.reduce((sum, payment) => {
+      if (payment.coaItems) {
+        const relevantCoaItem = payment.coaItems.find(coaItem => coaItem.coaId === coaId)
+        if (relevantCoaItem && relevantCoaItem.items) {
+          return sum + relevantCoaItem.items.reduce((itemSum, item) => itemSum + (item.value || 0), 0)
+        }
+      }
+      return sum
+    }, 0)
+    
+    return Math.max(0, coaValue - totalClaimed)
+  }
 
   // Calculate max allowed value based on claim type
   const getMaxAllowedValue = () => {
@@ -181,8 +241,14 @@ export default function PaymentCreateModal({ projects, onClose }) {
 
   // Calculate base value for retention reduce
   const getRetentionReduceBase = () => {
-    // Retention Reduce คำนวณจาก Total Claim Value (หลังหัก Advance)
-    return grandTotal - calculateAdvanceDeduction()
+    if (retentionReduceTiming === 'before') {
+      // หักก่อน - คำนวณจาก Grand Total (ก่อนหัก Advance Deduction)
+      return grandTotal
+    } else {
+      // หักหลัง VAT - คำนวณจาก Total Claim Value + VAT
+      const totalClaimValue = grandTotal - calculateAdvanceDeduction()
+      return totalClaimValue * 1.07
+    }
   }
 
   // Calculate advance deduction amount
@@ -302,10 +368,21 @@ export default function PaymentCreateModal({ projects, onClose }) {
   const ret = calculateRetentionReduce()
   const withTaxPercent = parseCurrency(form.withTaxPercent)
   
-  // Calculate balance: (Total Claim Value × 1.07) - Retention - With Tax
-  // Note: ส่ง totalClaimValue ไปให้ calculatePaymentBalance แทน grandTotal
-  // และส่ง advanceDeduction = 0 เพราะหักไปแล้ว
-  const { grossClaim, withTaxAmount, balanceValue: balance } = calculatePaymentBalance(totalClaimValue, 0, ret, withTaxPercent)
+  // Calculate balance based on retention reduce timing
+  let grossClaim, withTaxAmount, balance
+  
+  if (retentionReduceTiming === 'before') {
+    // หักก่อน: (Grand Total - Retention - Advance) × 1.07 - With Tax
+    const afterRetentionAndAdvance = grandTotal - ret - adv
+    grossClaim = afterRetentionAndAdvance * 1.07
+    withTaxAmount = (afterRetentionAndAdvance * withTaxPercent) / 100
+    balance = grossClaim - withTaxAmount
+  } else {
+    // หักหลัง VAT: (Total Claim Value × 1.07) - Retention - With Tax
+    grossClaim = totalClaimValue * 1.07
+    withTaxAmount = (totalClaimValue * withTaxPercent) / 100
+    balance = grossClaim - ret - withTaxAmount
+  }
 
   const validate = () => {
     const errs = {}
@@ -326,9 +403,13 @@ export default function PaymentCreateModal({ projects, onClose }) {
       }
       
       const total = calculateMainContractTotal()
-      const maxValue = currentProject?.originalContractValue || currentProject?.contractValue || 0
-      if (total > maxValue) {
-        errs.mainContractValue = `Total claim value (฿${total.toLocaleString()}) exceeds Main Contract Value (฿${maxValue.toLocaleString()})`
+      const mainContractValue = currentProject?.originalContractValue || currentProject?.contractValue || 0
+      const availableBalance = calculateMainContractBalance()
+      
+      if (total > mainContractValue) {
+        errs.mainContractValue = `Total claim value (฿${total.toLocaleString()}) exceeds Main Contract Value (฿${mainContractValue.toLocaleString()})`
+      } else if (total > availableBalance) {
+        errs.mainContractValue = `Total claim value (฿${total.toLocaleString()}) exceeds available Main Contract Balance (฿${availableBalance.toLocaleString()})`
       }
     }
     
@@ -347,9 +428,13 @@ export default function PaymentCreateModal({ projects, onClose }) {
           }
           
           const total = calculateCOATotal(coaItem.coaId)
-          const maxValue = coa?.value || 0
-          if (total > maxValue) {
-            errs[`coaValue_${coaItem.coaId}`] = `Total claim value (฿${total.toLocaleString()}) exceeds ${coa?.coaNo} Value (฿${maxValue.toLocaleString()})`
+          const coaValue = coa?.value || 0
+          const availableBalance = calculateCOABalance(coaItem.coaId)
+          
+          if (total > coaValue) {
+            errs[`coaValue_${coaItem.coaId}`] = `Total claim value (฿${total.toLocaleString()}) exceeds ${coa?.coaNo} Value (฿${coaValue.toLocaleString()})`
+          } else if (total > availableBalance) {
+            errs[`coaValue_${coaItem.coaId}`] = `Total claim value (฿${total.toLocaleString()}) exceeds available ${coa?.coaNo} Balance (฿${availableBalance.toLocaleString()})`
           }
         })
       }
@@ -382,14 +467,28 @@ export default function PaymentCreateModal({ projects, onClose }) {
       const finalRetentionReduce = calculateRetentionReduce()
       
       // Recalculate financial values based on Total Claim Value
-      const finalValue = totalClaimValue
+      let finalValue = totalClaimValue
       const finalAdv = finalAdvanceDeduction
       const finalRet = finalRetentionReduce
       const finalWithTaxPercent = parseCurrency(form.withTaxPercent)
       
-      // Calculate balance: (Total Claim Value × 1.07) - Retention - With Tax
-      const { grossClaim: finalGrossClaim, withTaxAmount: finalWithTaxAmount, balanceValue: finalBalance } = 
-        calculatePaymentBalance(finalValue, 0, finalRet, finalWithTaxPercent)
+      // Calculate balance based on retention reduce timing
+      let finalGrossClaim, finalWithTaxAmount, finalBalance
+      
+      if (retentionReduceTiming === 'before') {
+        // หักก่อน: (Grand Total - Retention - Advance) × 1.07 - With Tax
+        const afterRetentionAndAdvance = grandTotal - finalRet - finalAdv
+        finalGrossClaim = afterRetentionAndAdvance * 1.07
+        finalWithTaxAmount = (afterRetentionAndAdvance * finalWithTaxPercent) / 100
+        finalBalance = finalGrossClaim - finalWithTaxAmount
+        // Update finalValue for saving - should be the net amount after retention and advance
+        finalValue = afterRetentionAndAdvance
+      } else {
+        // หักหลัง VAT: (Total Claim Value × 1.07) - Retention - With Tax
+        finalGrossClaim = finalValue * 1.07
+        finalWithTaxAmount = (finalValue * finalWithTaxPercent) / 100
+        finalBalance = finalGrossClaim - finalRet - finalWithTaxAmount
+      }
       
       // Prepare payment data
       const paymentData = {
@@ -406,6 +505,7 @@ export default function PaymentCreateModal({ projects, onClose }) {
         retentionReduce:  finalRet,
         retentionReduceType: useRetentionReduce ? retentionReduceType : null,
         retentionReduceValue: useRetentionReduce ? parseCurrency(retentionReduceValue) : null,
+        retentionReduceTiming: useRetentionReduce ? retentionReduceTiming : null,
         withTaxPercent:   finalWithTaxPercent,
         withTaxValue:     finalWithTaxAmount,
         grossClaimValue:  finalGrossClaim,
@@ -540,11 +640,40 @@ export default function PaymentCreateModal({ projects, onClose }) {
               {claimMainContract && (
                 <div className="ml-5 space-y-2">
                   {currentProject && (
-                    <div className="text-xs text-slate-600 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
-                      <span className="font-semibold">Main Contract Value: </span>
-                      <span className="text-blue-700 font-bold">
-                        ฿{(currentProject.originalContractValue || currentProject.contractValue || 0).toLocaleString()}
-                      </span>
+                    <div className="space-y-2">
+                      {/* Main Contract Value */}
+                      <div className="text-xs text-slate-600 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
+                        <span className="font-semibold">Main Contract Value: </span>
+                        <span className="text-blue-700 font-bold">
+                          ฿{(currentProject.originalContractValue || currentProject.contractValue || 0).toLocaleString()}
+                        </span>
+                      </div>
+                      
+                      {/* Main Contract Balance */}
+                      <div className={`text-xs px-3 py-2 rounded-lg border ${
+                        calculateMainContractBalance() === 0 
+                          ? 'text-rose-600 bg-rose-50 border-rose-200'
+                          : calculateMainContractBalance() < (currentProject.originalContractValue || currentProject.contractValue || 0) * 0.1
+                          ? 'text-amber-600 bg-amber-50 border-amber-200'
+                          : 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                      }`}>
+                        <span className="font-semibold">Main Contract Balance: </span>
+                        <span className="font-bold">
+                          ฿{calculateMainContractBalance().toLocaleString()}
+                        </span>
+                        <span className="text-slate-500 ml-2 text-[10px]">
+                          {(() => {
+                            const mainContractValue = currentProject.originalContractValue || currentProject.contractValue || 0
+                            const balance = calculateMainContractBalance()
+                            const claimed = mainContractValue - balance
+                            const percentage = mainContractValue > 0 ? Math.round((claimed / mainContractValue) * 100) : 0
+                            
+                            return balance === 0 
+                              ? `(Fully claimed - ${percentage}%)`
+                              : `(${percentage}% claimed)`
+                          })()} 
+                        </span>
+                      </div>
                     </div>
                   )}
                   
@@ -703,11 +832,37 @@ export default function PaymentCreateModal({ projects, onClose }) {
                             </div>
 
                             <div className="p-2 space-y-2">
-                              {/* COA Value Info */}
+                              {/* COA Value */}
                               <div className="text-xs text-slate-600 bg-purple-50 px-3 py-2 rounded-lg border border-purple-200">
                                 <span className="font-semibold">COA Value: </span>
                                 <span className="text-purple-700 font-bold">
                                   ฿{(coa.value || 0).toLocaleString()}
+                                </span>
+                              </div>
+                              
+                              {/* COA Balance */}
+                              <div className={`text-xs px-3 py-2 rounded-lg border ${
+                                calculateCOABalance(coaItem.coaId) === 0 
+                                  ? 'text-rose-600 bg-rose-50 border-rose-200'
+                                  : calculateCOABalance(coaItem.coaId) < (coa.value || 0) * 0.1
+                                  ? 'text-amber-600 bg-amber-50 border-amber-200'
+                                  : 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                              }`}>
+                                <span className="font-semibold">COA Balance: </span>
+                                <span className="font-bold">
+                                  ฿{calculateCOABalance(coaItem.coaId).toLocaleString()}
+                                </span>
+                                <span className="text-slate-500 ml-2 text-[10px]">
+                                  {(() => {
+                                    const coaValue = coa.value || 0
+                                    const balance = calculateCOABalance(coaItem.coaId)
+                                    const claimed = coaValue - balance
+                                    const percentage = coaValue > 0 ? Math.round((claimed / coaValue) * 100) : 0
+                                    
+                                    return balance === 0 
+                                      ? `(Fully claimed - ${percentage}%)`
+                                      : `(${percentage}% claimed)`
+                                  })()} 
                                 </span>
                               </div>
 
@@ -982,6 +1137,7 @@ export default function PaymentCreateModal({ projects, onClose }) {
                         setUseRetentionReduce(e.target.checked)
                         if (!e.target.checked) {
                           setRetentionReduceValue('')
+                          setRetentionReduceTiming('after')
                         }
                       }}
                       className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-2 focus:ring-blue-500"
@@ -1025,6 +1181,35 @@ export default function PaymentCreateModal({ projects, onClose }) {
                         </div>
                       )}
                       
+                      {/* Timing Selection Checkboxes */}
+                      <div className="space-y-2 pt-2 border-t border-slate-200">
+                        <p className="text-xs font-medium text-slate-600">Retention Reduce Timing:</p>
+                        
+                        <div className="space-y-1">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="retentionTiming"
+                              checked={retentionReduceTiming === 'before'}
+                              onChange={() => setRetentionReduceTiming('before')}
+                              className="w-3 h-3 text-blue-600 border-slate-300 focus:ring-2 focus:ring-blue-500"
+                            />
+                            <span className="text-xs text-slate-700">หักก่อน - หักก่อนยอด Total Claim Value</span>
+                          </label>
+                          
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="retentionTiming"
+                              checked={retentionReduceTiming === 'after'}
+                              onChange={() => setRetentionReduceTiming('after')}
+                              className="w-3 h-3 text-blue-600 border-slate-300 focus:ring-2 focus:ring-blue-500"
+                            />
+                            <span className="text-xs text-slate-700">หักหลัง - หักตามเดิม หลังจาก +VAT</span>
+                          </label>
+                        </div>
+                      </div>
+                      
                       {/* Show calculated amount */}
                       {retentionReduceValue && (
                         <div className="text-xs text-slate-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
@@ -1032,6 +1217,7 @@ export default function PaymentCreateModal({ projects, onClose }) {
                             <span className="text-slate-500">Base: ฿{getRetentionReduceBase().toLocaleString()} × {retentionReduceValue}% = </span>
                           )}
                           <span className="font-semibold">฿{calculateRetentionReduce().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          <span className="text-slate-500 ml-2">({retentionReduceTiming === 'before' ? 'หักก่อน VAT' : 'หักหลัง VAT'})</span>
                         </div>
                       )}
                     </>
@@ -1094,12 +1280,12 @@ export default function PaymentCreateModal({ projects, onClose }) {
 
 export function Modal({ title, subtitle, onClose, children, maxWidth = 'max-w-4xl' }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:static print:block print:p-0">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
 
       {/* Panel */}
-      <div className={clsx('relative bg-white rounded-2xl shadow-2xl w-full flex flex-col max-h-[90vh]', maxWidth)}>
+      <div className={clsx('relative bg-white rounded-2xl shadow-2xl w-full flex flex-col max-h-[90vh] print:static print:block print:max-h-none print:shadow-none print:rounded-none', maxWidth)}>
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-100 shrink-0">
           <div>
@@ -1115,7 +1301,7 @@ export function Modal({ title, subtitle, onClose, children, maxWidth = 'max-w-4x
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-6 py-5 print:overflow-visible print:px-0 print:py-0 print:block">
           {children}
         </div>
       </div>

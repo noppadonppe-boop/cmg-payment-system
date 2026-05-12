@@ -1,6 +1,6 @@
 import {
   GitPullRequest, GitMerge, CheckCircle2, Calendar,
-  User, Banknote, FileText, ArrowRight, XCircle, Clock
+  User, Banknote, FileText, ArrowRight, XCircle, Clock, Edit
 } from 'lucide-react'
 import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
@@ -29,7 +29,7 @@ function InfoRow({ label, value }) {
   )
 }
 
-export default function CORDetailModal({ cor, onClose, onConvert }) {
+export default function CORDetailModal({ cor, onClose, onEdit, onConvert }) {
   const { projects, coas } = useData()
   const { currentUser, USERS, can } = useAuth()
 
@@ -42,7 +42,9 @@ export default function CORDetailModal({ cor, onClose, onConvert }) {
   const StatusIcon = sc.icon
 
   const isPM       = can('canApprovePayments')
+  const isQsEng    = can('canCreateClaims')
   const canConvert = isPM && !cor.convertedToCOA && cor.status === 'Submitted'
+  const canEdit    = isQsEng && cor.status === 'Prepare doc'
 
   return (
     <Modal
@@ -173,7 +175,14 @@ export default function CORDetailModal({ cor, onClose, onConvert }) {
         )}
       </div>
 
-      <div className="flex justify-end mt-6 pt-4 border-t border-slate-100">
+      <div className="flex justify-between mt-6 pt-4 border-t border-slate-100">
+        <div>
+          {canEdit && (
+            <Button variant="primary" icon={Edit} onClick={onEdit}>
+              Edit COR
+            </Button>
+          )}
+        </div>
         <Button variant="secondary" onClick={onClose}>Close</Button>
       </div>
     </Modal>
