@@ -72,6 +72,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
   const [useRetentionReduce, setUseRetentionReduce] = useState(!!payment?.retentionReduceValue || hasLegacyRetention)
   const [retentionReduceType, setRetentionReduceType] = useState(payment?.retentionReduceType ?? (hasLegacyRetention ? 'amount' : 'percentage'))
   const [retentionReduceValue, setRetentionReduceValue] = useState(payment?.retentionReduceValue ? String(payment.retentionReduceValue) : (hasLegacyRetention ? String(payment.retentionReduce) : ''))
+  const [retentionReduceTiming, setRetentionReduceTiming] = useState(payment?.retentionReduceTiming ?? 'after') // 'before' or 'after' VAT
 
   // Claim type state
   const [claimMainContract, setClaimMainContract] = useState(payment?.claimMainContract ?? isLegacyRecord)
@@ -195,8 +196,17 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
 
   // Calculate base value for retention reduce
   const getRetentionReduceBase = () => {
-    // Retention Reduce คำนวณจาก Total Claim Value (หลังหัก Advance)
-    return grandTotal - calculateAdvanceDeduction()
+    if (retentionReduceTiming === 'before') {
+      // หักก่อน - คำนวณจากผลรวมของ Main + COA เท่านั้น (ไม่รวม Other Claim)
+      let base = 0
+      if (claimMainContract) base += calculateMainContractTotal()
+      if (claimCOA) base += calculateAllCOATotal()
+      return base
+    } else {
+      // หักหลัง - คำนวณจาก Total Claim Value (หลังหัก Advance) × 1.07
+      const tcv = grandTotal - calculateAdvanceDeduction()
+      return tcv * 1.07
+    }
   }
 
   // Calculate advance deduction amount
@@ -311,15 +321,27 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
   // Use grand total for calculations
   const grandTotal = calculateGrandTotal()
   const adv = calculateAdvanceDeduction()
-  const totalClaimValue = grandTotal - adv // Total Claim Value หลังหัก Advance
-  
   const ret = calculateRetentionReduce()
   const withTaxPercent = parseCurrency(form.withTaxPercent)
   
-  // Calculate balance: (Total Claim Value × 1.07) - Retention - With Tax
-  // Note: ส่ง totalClaimValue ไปให้ calculatePaymentBalance แทน grandTotal
-  // และส่ง advanceDeduction = 0 เพราะหักไปแล้ว
-  const { grossClaim, withTaxAmount, balanceValue: balance } = calculatePaymentBalance(totalClaimValue, 0, ret, withTaxPercent)
+  // Compute the Main+COA sum (without Other Claim)
+  const mainCOASum = (claimMainContract ? calculateMainContractTotal() : 0) + (claimCOA ? calculateAllCOATotal() : 0)
+
+  // displayedTCV: ยอดที่แสดงใน Total Claim Value (เปลี่ยนตาม timing)
+  //   หักก่อน: (Main+COA) - Retention - Advance + Other Claim
+  //   หักหลัง: (Main+COA+Other) - Advance = grandTotal - adv
+  const displayedTCV = retentionReduceTiming === 'before'
+    ? mainCOASum - ret - adv + parseCurrency(form.otherClaim)
+    : grandTotal - adv
+
+  // Calculate balance based on retention reduce timing
+  //   หักก่อน: Retention อยู่ใน TCV แล้ว → Balance = TCV × 1.07 - With Tax
+  //   หักหลัง: Balance = TCV × 1.07 - Retention - With Tax
+  const grossClaim = displayedTCV * 1.07
+  const withTaxAmount = (displayedTCV * withTaxPercent) / 100
+  const balance = retentionReduceTiming === 'before'
+    ? grossClaim - withTaxAmount
+    : grossClaim - ret - withTaxAmount
 
   const validate = () => {
     const errs = {}
@@ -391,19 +413,25 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
       
       // Calculate deductions
       const finalAdvanceDeduction = calculateAdvanceDeduction()
-      const totalClaimValue = grandTotal - finalAdvanceDeduction // Total Claim Value หลังหัก Advance
-      
       const finalRetentionReduce = calculateRetentionReduce()
-      
-      // Recalculate financial values based on Total Claim Value
-      const finalValue = totalClaimValue
+      const finalWithTaxPercent = parseCurrency(form.withTaxPercent)
       const finalAdv = finalAdvanceDeduction
       const finalRet = finalRetentionReduce
-      const finalWithTaxPercent = parseCurrency(form.withTaxPercent)
       
-      // Calculate balance: (Total Claim Value × 1.07) - Retention - With Tax
-      const { grossClaim: finalGrossClaim, withTaxAmount: finalWithTaxAmount, balanceValue: finalBalance } = 
-        calculatePaymentBalance(finalValue, 0, finalRet, finalWithTaxPercent)
+      // Compute Main+COA sum (without Other Claim)
+      const finalMainCOASum = (claimMainContract ? calculateMainContractTotal() : 0) + (claimCOA ? calculateAllCOATotal() : 0)
+      
+      // displayedTCV mirrors what is shown in the UI
+      const finalTCV = retentionReduceTiming === 'before'
+        ? finalMainCOASum - finalRet - finalAdv + parseCurrency(form.otherClaim)
+        : grandTotal - finalAdv
+      
+      let finalValue = finalTCV
+      const finalGrossClaim = finalTCV * 1.07
+      const finalWithTaxAmount = (finalTCV * finalWithTaxPercent) / 100
+      const finalBalance = retentionReduceTiming === 'before'
+        ? finalGrossClaim - finalWithTaxAmount
+        : finalGrossClaim - finalRet - finalWithTaxAmount
       
       // Prepare payment data
       const paymentData = {
@@ -420,6 +448,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
         retentionReduce:  finalRet,
         retentionReduceType: useRetentionReduce ? retentionReduceType : null,
         retentionReduceValue: useRetentionReduce ? parseCurrency(retentionReduceValue) : null,
+        retentionReduceTiming: useRetentionReduce ? retentionReduceTiming : null,
         withTaxPercent:   finalWithTaxPercent,
         withTaxValue:     finalWithTaxAmount,
         grossClaimValue:  finalGrossClaim,
@@ -943,7 +972,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
             <span className="text-sm font-semibold text-white">Financial Calculation</span>
           </div>
           <div className="p-3 space-y-2">
-            {/* Grand Total Display - After Advance Deduction */}
+            {/* Total Claim Value Display */}
             {(claimMainContract || claimCOA) && (
               <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-3">
                 <div className="flex items-center justify-between">
@@ -954,20 +983,20 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                       {claimMainContract && !claimCOA && 'Main Contract'}
                       {!claimMainContract && claimCOA && 'COA'}
                       {parseCurrency(form.otherClaim) > 0 && ' + Other Claim'}
-                      {useAdvanceDeduction && ' (After Advance Deduction)'}
+                      {useRetentionReduce && retentionReduceTiming === 'before' && ' - Retention Reduce'}
+                      {useAdvanceDeduction && ' - Advance Deduction'}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-blue-700">
-                      ฿{(grandTotal - adv).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ฿{displayedTCV.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
-                    {(useAdvanceDeduction && adv > 0) || parseCurrency(form.otherClaim) > 0 ? (
-                      <p className="text-xs text-slate-500 mt-1">
-                        {parseCurrency(form.otherClaim) > 0 && `Original: ฿${(grandTotal - parseCurrency(form.otherClaim)).toLocaleString()}`}
-                        {parseCurrency(form.otherClaim) > 0 && ` + Other: ฿${parseCurrency(form.otherClaim).toLocaleString()}`}
-                        {useAdvanceDeduction && adv > 0 && ` - Advance: ฿${adv.toLocaleString()}`}
-                      </p>
-                    ) : null}
+                    <p className="text-xs text-slate-500 mt-1">
+                      ฿{mainCOASum.toLocaleString()}
+                      {parseCurrency(form.otherClaim) > 0 && ` + ฿${parseCurrency(form.otherClaim).toLocaleString()}`}
+                      {useRetentionReduce && ret > 0 && retentionReduceTiming === 'before' && ` - Retention ฿${ret.toLocaleString()}`}
+                      {useAdvanceDeduction && adv > 0 && ` - Advance ฿${adv.toLocaleString()}`}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1033,6 +1062,35 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                         </div>
                       )}
                       
+                      {/* Timing Selection Checkboxes */}
+                      <div className="space-y-2 pt-2 border-t border-slate-200">
+                        <p className="text-xs font-medium text-slate-600">Retention Reduce Timing:</p>
+                        
+                        <div className="space-y-1">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="retentionTimingEdit"
+                              checked={retentionReduceTiming === 'before'}
+                              onChange={() => setRetentionReduceTiming('before')}
+                              className="w-3 h-3 text-blue-600 border-slate-300 focus:ring-2 focus:ring-blue-500"
+                            />
+                            <span className="text-xs text-slate-700">หักก่อน - หักก่อนยอด Total Claim Value</span>
+                          </label>
+                          
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="retentionTimingEdit"
+                              checked={retentionReduceTiming === 'after'}
+                              onChange={() => setRetentionReduceTiming('after')}
+                              className="w-3 h-3 text-blue-600 border-slate-300 focus:ring-2 focus:ring-blue-500"
+                            />
+                            <span className="text-xs text-slate-700">หักหลัง - หักตามเดิม หลังจาก +VAT</span>
+                          </label>
+                        </div>
+                      </div>
+                      
                       {/* Show calculated amount */}
                       {retentionReduceValue && (
                         <div className="text-xs text-slate-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
@@ -1040,6 +1098,7 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
                             <span className="text-slate-500">Base: ฿{getRetentionReduceBase().toLocaleString()} × {retentionReduceValue}% = </span>
                           )}
                           <span className="font-semibold">฿{calculateRetentionReduce().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          <span className="text-slate-500 ml-2">({retentionReduceTiming === 'before' ? 'หักก่อน VAT' : 'หักหลัง VAT'})</span>
                         </div>
                       )}
                     </>
@@ -1073,7 +1132,11 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
             )}>
               <div className="text-sm text-slate-600">
                 <span className="font-medium">Balance Value</span>
-                <span className="text-slate-400 ml-2 text-xs">= (Total Claim × 1.07) - Retention - With Tax</span>
+                <span className="text-slate-400 ml-2 text-xs">
+                  {retentionReduceTiming === 'before'
+                    ? '= (Total Claim × 1.07) - With Tax'
+                    : '= (Total Claim × 1.07) - Retention - With Tax'}
+                </span>
               </div>
               <span className={clsx(
                 'text-lg font-bold',

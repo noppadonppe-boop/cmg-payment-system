@@ -8,6 +8,7 @@ import Button from '../ui/Button'
 import Badge from '../ui/Badge'
 import { Modal } from './PaymentCreateModal'
 import { clsx } from 'clsx'
+import THBText from 'thai-baht-text'
 
 function fmtCurrency(val) {
   if (!val && val !== 0) return '—'
@@ -126,229 +127,259 @@ export default function InvoiceModal({ payment, onClose }) {
     window.print()
   }
 
+  const itemSum = (payment.claimMainContract || payment.claimCOA)
+    ? (payment.mainContractItems?.reduce((acc, it) => acc + (it.value || 0), 0) || 0) +
+      (payment.coaItems?.reduce((acc, coa) => acc + (coa.items?.reduce((s, it) => s + (it.value || 0), 0) || 0), 0) || 0)
+    : payment.value;
+
+  const displayVat = payment.vatValue ?? (payment.value * 0.07);
+  const visualTotal = itemSum + displayVat;
+
   const invoicePreview = (
-    <div className="print-area bg-white border border-slate-300 p-4 sm:p-6 print:p-0 print:border-none print:shadow-none print:w-full print:max-w-none text-[10px] sm:text-[11px] leading-tight">
-      {/* ── Header: Logo + Title ── */}
-      <div className="flex justify-between items-start mb-2">
-        {/* Left: Logo & Address */}
-        <div className="flex gap-4">
-          {/* CMG Logo */}
-          <div className="w-28 h-16 shrink-0 flex items-center justify-start">
-            <img src="/logo.png" alt="CMG Logo" className="max-w-full max-h-full object-contain" />
+    <div className="print-area flex justify-center bg-slate-100 py-8 print:p-0 print:bg-white overflow-auto max-h-[70vh] print:max-h-none print:overflow-visible">
+      <div 
+        className="bg-white text-black shrink-0 shadow-lg print:shadow-none relative" 
+        style={{ 
+          width: '210mm', 
+          minHeight: '297mm', 
+          padding: '12mm 15mm', 
+          fontFamily: 'Arial, sans-serif'
+        }}
+      >
+        {/* ── Header: Logo + Title ── */}
+        <div className="flex justify-between items-start mb-6">
+          {/* Left: Logo & Address */}
+          <div className="flex gap-3">
+            {/* CMG Logo */}
+            <div className="w-[120px] shrink-0 flex items-start justify-center pt-1">
+              <img src="/logo.png" alt="CMG Logo" className="max-w-full h-auto object-contain" />
+            </div>
+            <div className="text-[11px] leading-[1.4]">
+              <p className="font-bold text-blue-700 text-[12px] uppercase tracking-wide">CMG ENGINEERING&amp; CONSTRUCTION CO.,LTD</p>
+              <p className="text-blue-700">4/281 Moo 3, Nempra Mueang, Rayong District, Rayong Province 21000</p>
+              <p className="text-blue-700">Tel 033-680588 Fax 033-680588</p>
+            </div>
           </div>
-          <div className="text-[10px] leading-tight pt-2">
-            <p className="font-bold text-blue-700 text-[11px]">CMG ENGINEERING&amp; CONSTRUCTION CO.,LTD</p>
-            <p className="text-blue-700 mt-0.5">4/281 Moo 3, Nempra Mueang, Rayong District, Rayong Province 21000</p>
-            <p className="text-blue-700">Tel 033-680588 Fax 033-680588</p>
-            <p className="text-slate-800 mt-0.5">CMG TAX ID: <span className="font-semibold">0215557001784</span></p>
+
+          {/* Right: FRM-CMG */}
+          <div className="text-[9px] text-black pt-1">
+            <p>FROM-CMG-AC-011</p>
           </div>
         </div>
 
-        {/* Right: FRM-CMG */}
-        <div className="text-[8px] text-slate-500 text-right pt-2">
-          <p>FRM-CMG-AC-011</p>
-        </div>
-      </div>
-
-      {/* ── Title ── */}
-      <div className="text-center mb-4">
-        <h1 className="text-xl font-bold">
-          INVOICE <span className="text-red-600">(Original)</span>
-        </h1>
-      </div>
-
-      {/* ── Invoice Info Grid ── */}
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        {/* Left: Client info */}
-        <div className="space-y-1">
-          <div className="flex items-center">
-            <span className="w-24 shrink-0 font-semibold">Invoice to :</span>
-            <span className="flex-1 border-b border-slate-800 px-1">{project?.clientInfo?.name || ''}</span>
+        {/* Title & Tax ID */}
+        <div className="flex justify-between items-end mb-4">
+          <div className="w-1/4"></div>
+          <div className="w-1/2 text-center pl-8">
+            <h1 className="text-[20px] font-bold">
+              INVOICE <span className="text-red-600 ml-1">(Original)</span>
+            </h1>
           </div>
-          <div className="flex items-center">
-            <span className="w-24 shrink-0 font-semibold">Adress :</span>
-            <span className="flex-1 border-b border-slate-800 px-1">{project?.clientInfo?.address || ''}</span>
-          </div>
-          <div className="flex items-center">
-            <span className="w-24 shrink-0 font-semibold">TAX ID :</span>
-            <span className="flex-1 border-b border-slate-800 px-1">{project?.clientInfo?.taxId || ''}</span>
-          </div>
-          <div className="flex items-center">
-            <span className="w-24 shrink-0 font-semibold">Contract No. :</span>
-            <span className="flex-1 border-b border-slate-800 px-1">{contractNoString}</span>
-          </div>
-          <div className="flex items-center">
-            <span className="w-24 shrink-0 font-semibold">Attention :</span>
-            <span className="flex-1 border-b border-slate-800 px-1"></span>
+          <div className="w-1/4 text-right text-[10px] font-semibold leading-tight">
+            <p>CMG TAX ID:</p>
+            <p className="font-bold">0215557001784</p>
           </div>
         </div>
 
-        {/* Right: Invoice details box */}
-        <div className="border border-slate-800">
-          <div className="grid grid-cols-[120px_1fr] border-b border-slate-800">
-            <div className="border-r border-slate-800 px-2 py-1 font-semibold">Invoice No :</div>
-            <div className="px-2 py-1 font-semibold">{form.invoiceNo || '—'}</div>
+        {/* ── Invoice Info Grid ── */}
+        <div className="flex border border-black border-b-0 text-[11px]">
+          {/* Left: Client info */}
+          <div className="w-[60%] p-2 py-3 space-y-[10px] relative">
+            <div className="flex items-end">
+              <span className="w-[70px] shrink-0">Invoice to.</span>
+              <span className="flex-1 border-b-[1.5px] border-black pb-0 leading-none pl-1 font-semibold">{project?.clientInfo?.name || ''}</span>
+            </div>
+            <div className="flex items-end">
+              <span className="w-[70px] shrink-0">Adress:</span>
+              <span className="flex-1 border-b-[1.5px] border-black pb-0 leading-none pl-1">{project?.clientInfo?.address || ''}</span>
+            </div>
+            <div className="flex items-end">
+              <span className="w-[70px] shrink-0"></span>
+              <span className="flex-1 border-b-[1.5px] border-black pb-0 leading-none pl-1">&nbsp;</span>
+            </div>
+            <div className="flex items-end">
+              <span className="w-[70px] shrink-0">TAX ID :</span>
+              <span className="flex-1 border-b-[1.5px] border-black pb-0 leading-none pl-1">{project?.clientInfo?.taxId || ''}</span>
+            </div>
+            <div className="flex items-end">
+              <span className="w-[70px] shrink-0">Contract No.</span>
+              <span className="flex-1 border-b-[1.5px] border-black pb-0 leading-none pl-1">{contractNoString}</span>
+            </div>
+            <div className="flex items-end">
+              <span className="w-[70px] shrink-0">Attention :</span>
+              <span className="flex-1 border-b-[1.5px] border-black pb-0 leading-none pl-1"></span>
+            </div>
           </div>
-          <div className="grid grid-cols-[120px_1fr] border-b border-slate-800">
-            <div className="border-r border-slate-800 px-2 py-1 font-semibold">Date :</div>
-            <div className="px-2 py-1">{fmtInvoiceDate(form.invoiceDate)}</div>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] border-b border-slate-800">
-            <div className="border-r border-slate-800 px-2 py-1 font-semibold">Customer No :</div>
-            <div className="px-2 py-1"></div>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] border-b border-slate-800">
-            <div className="border-r border-slate-800 px-2 py-1 font-semibold">Credit Term :</div>
-            <div className="px-2 py-1">{project?.clientInfo?.creditTerm || ''}</div>
-          </div>
-          <div className="grid grid-cols-[120px_1fr]">
-            <div className="border-r border-slate-800 px-2 py-1 font-semibold">Due Date :</div>
-            <div className="px-2 py-1">{fmtInvoiceDate(form.invoiceDueDate)}</div>
+
+          {/* Right: Invoice details box */}
+          <div className="w-[40%] border-l border-black flex flex-col font-semibold">
+            <div className="flex border-b border-black flex-1 items-stretch">
+              <div className="w-28 border-r border-black px-2 flex items-center justify-end text-center">Invoice No :</div>
+              <div className="px-2 font-bold text-center flex-1 flex items-center justify-center">{form.invoiceNo || ''}</div>
+            </div>
+            <div className="flex border-b border-black flex-1 items-stretch">
+              <div className="w-28 border-r border-black px-2 flex items-center justify-end text-center">Date :</div>
+              <div className="px-2 text-center flex-1 flex items-center justify-center">{fmtInvoiceDate(form.invoiceDate)}</div>
+            </div>
+            <div className="flex border-b border-black flex-1 items-stretch">
+              <div className="w-28 border-r border-black px-2 flex items-center justify-end text-center">Customer No :</div>
+              <div className="px-2 text-center flex-1 flex items-center justify-center"></div>
+            </div>
+            <div className="flex border-b border-black flex-1 items-stretch">
+              <div className="w-28 border-r border-black px-2 flex items-center justify-end text-center">Credit Term :</div>
+              <div className="px-2 text-center flex-1 flex items-center justify-center">{project?.clientInfo?.creditTerm || ''}</div>
+            </div>
+            <div className="flex flex-1 items-stretch">
+              <div className="w-28 border-r border-black px-2 flex items-center justify-end text-center">Due Date :</div>
+              <div className="px-2 text-center flex-1 flex items-center justify-center">{fmtInvoiceDate(form.invoiceDueDate)}</div>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* ── Description / Amount Table ── */}
-      <table className="w-full border border-slate-800 mb-0">
-        <thead>
-          <tr className="border-b border-slate-800">
-            <th className="border-r border-slate-800 py-1 px-2 text-center text-[10px] font-semibold">
-              Description
-            </th>
-            <th className="py-1 px-2 text-center text-[10px] font-semibold w-36">
-              Amount
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr className="border-b border-slate-300" style={{ minHeight: '120px' }}>
-            <td className="border-r border-slate-800 py-2 px-2 align-top">
-              <p className="font-bold text-[11px] uppercase">{project?.name || ''}</p>
-              {payment.detail && <p className="mt-0.5">{payment.detail}</p>}
+        {/* ── Main Table ── */}
+        <table className="w-full border-collapse border border-black text-[11px] mb-0">
+          <thead>
+            <tr className="border-b border-black h-8">
+              <th className="border-r border-black font-bold w-[60%] text-center">Description</th>
+              <th className="font-bold w-[40%] text-center">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* Project Name and Detail */}
+            <tr>
+              <td className="border-r border-black p-3 pb-1 align-top">
+                <p className="font-bold uppercase text-[12px]">{project?.name || ''}</p>
+                {payment.detail && <p className="font-bold mt-1.5">{payment.detail}</p>}
+              </td>
+              <td className="p-3 pb-1 align-top text-right pr-6 font-bold text-[11px] mt-[26px]">
+                {/* Only show overall value if there are no sub-items */}
+                {(!payment.claimMainContract && !payment.claimCOA) ? fmtInvoiceCurrency(payment.value) : ''}
+              </td>
+            </tr>
 
-              {/* Main Contract Items */}
-              {payment.claimMainContract && payment.mainContractItems?.length > 0 && (
-                <div className="mt-2 space-y-0.5">
-                  {payment.mainContractItems.map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-[10px]">
-                      <span>{item.description}</span>
-                      <span className="font-semibold">{fmtInvoiceCurrency(item.value)}</span>
-                    </div>
-                  ))}
+            {/* Main Contract Items */}
+            {payment.claimMainContract && payment.mainContractItems?.map((item, idx) => (
+              <tr key={`main-${idx}`}>
+                <td className="border-r border-black pl-5 pr-3 py-1 align-top font-semibold">
+                  {item.description}
+                </td>
+                <td className="pr-6 py-1 align-top text-right font-bold text-[11px]">
+                  {fmtInvoiceCurrency(item.value)}
+                </td>
+              </tr>
+            ))}
+
+            {/* COA Items */}
+            {payment.claimCOA && payment.coaItems?.map((coa, cidx) => (
+              <React.Fragment key={`coa-${cidx}`}>
+                <tr>
+                  <td className="border-r border-black pl-5 pr-3 py-1 align-top font-bold">
+                    {coa.coaNo}
+                  </td>
+                  <td className="pr-6 py-1 align-top text-right font-bold text-[11px]"></td>
+                </tr>
+                {coa.items?.map((item, idx) => (
+                  <tr key={`coa-item-${idx}`}>
+                    <td className="border-r border-black pl-8 pr-3 py-1 align-top font-semibold">
+                      {item.description}
+                    </td>
+                    <td className="pr-6 py-1 align-top text-right font-bold text-[11px]">
+                      {fmtInvoiceCurrency(item.value)}
+                    </td>
+                  </tr>
+                ))}
+              </React.Fragment>
+            ))}
+
+            {/* Filler Row to push height and keep the invoice layout consistent */}
+            <tr>
+              <td className="border-r border-black" style={{ height: '60px' }}></td>
+              <td></td>
+            </tr>
+
+            {/* Financial Summary Rows - NO internal borders */}
+            <tr>
+              <td className="border-r border-black text-right pr-4 py-1 font-bold text-[11px] leading-tight">VAT 7%</td>
+              <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(displayVat)}</td>
+            </tr>
+            <tr>
+              <td className="border-r border-black text-right pr-4 py-1 font-bold text-[11px] leading-tight">Total</td>
+              <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(visualTotal)}</td>
+            </tr>
+            <tr>
+              <td className="border-r border-black text-right pr-4 py-1 font-bold text-[11px] leading-tight">
+                <span className="underline">Deduct</span> {payment.retentionReduceValue || '10'}% Retention
+              </td>
+              <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(payment.retentionReduce || 0)}</td>
+            </tr>
+            <tr>
+              <td className="border-r border-black text-right pr-4 py-1 font-bold text-[11px] leading-tight pb-2">
+                Withhoding Tax ={payment.withTaxPercent || 3}%
+              </td>
+              <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight pb-2">{fmtInvoiceCurrency(payment.withTaxValue || 0)}</td>
+            </tr>
+
+            {/* NET TOTAL */}
+            <tr>
+              <td className="border-r border-black text-right pr-4 pt-4 pb-2 font-bold text-[11px] leading-tight">NET TOTAL</td>
+              <td className="text-right pr-6 pt-4 pb-2 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(payment.balanceValue)}</td>
+            </tr>
+
+            {/* Bank Details */}
+            <tr className="border-t border-black bg-white">
+              <td colSpan="2" className="p-2 pl-3">
+                <div className="text-[9px] space-y-[1px] leading-tight">
+                  <p className="font-bold text-[10px]">Bank Name: Kasikorn Bank</p>
+                  <p className="font-bold">Branch Name: Big C, Rayong, Thailand</p>
+                  <p className="font-bold">Swift/Sort Code: KASITHBK</p>
+                  <p className="font-bold">Address: 15/11 Choeng Noen, Muang Rayong, Big C Supercenter Building, Floor 1,</p>
+                  <p className="font-bold">Room No.Gcr 115 / 2a, Bang Na-Trat, Rayong, Thailand 21000</p>
+                  <p className="text-red-600 font-bold text-[10px]">Bank Account number: 067-150-5530</p>
+                  <p className="font-bold">Tel +66 (0)38-011771, 38-011774</p>
+                  <p className="font-bold">Fax 038-011776</p>
+                  <p className="font-bold">Fax 038-011777</p>
                 </div>
-              )}
+              </td>
+            </tr>
+            
+            {/* Thai Baht Text Row */}
+            <tr className="border-t border-black bg-white">
+              <td colSpan="2" className="py-2 px-2 font-bold text-[11px]">
+                {THBText(payment.balanceValue || 0)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
 
-              {/* COA Items */}
-              {payment.claimCOA && payment.coaItems?.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {payment.coaItems.map((coa, cidx) => (
-                    <div key={cidx}>
-                      <p className="font-bold text-[10px]">{coa.coaNo}</p>
-                      {coa.items?.map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-[10px] pl-2">
-                          <span>{item.description}</span>
-                          <span className="font-semibold">{fmtInvoiceCurrency(item.value)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </td>
-            <td className="py-2 px-2 text-right align-top whitespace-nowrap font-semibold">
-              {fmtInvoiceCurrency(payment.value)}
-            </td>
-          </tr>
-          {/* VAT */}
-          <tr>
-            <td className="border-r border-slate-800 py-1 px-2 text-right font-semibold">VAT 7%</td>
-            <td className="py-1 px-2 text-right whitespace-nowrap font-semibold">
-              {fmtInvoiceCurrency(payment.value * 0.07)}
-            </td>
-          </tr>
-          {/* Total */}
-          <tr>
-            <td className="border-r border-slate-800 py-1 px-2 text-right font-semibold">Total</td>
-            <td className="py-1 px-2 text-right whitespace-nowrap font-semibold">
-              {fmtInvoiceCurrency(payment.value + (payment.value * 0.07))}
-            </td>
-          </tr>
-          {/* Retention */}
-          <tr>
-            <td className="border-r border-slate-800 py-1 px-2 text-right">
-              <span className="underline font-semibold">Deduct</span>
-              <span className="ml-1 font-semibold">10% Retention</span>
-            </td>
-            <td className="py-1 px-2 text-right whitespace-nowrap font-semibold">
-              {fmtInvoiceCurrency(payment.retentionReduce || 0)}
-            </td>
-          </tr>
-          {/* Withholding Tax */}
-          <tr>
-            <td className="border-r border-slate-800 py-1 px-2 text-right font-semibold">Withholding Tax =3%</td>
-            <td className="py-1 px-2 text-right whitespace-nowrap font-semibold">
-              {fmtInvoiceCurrency(payment.withTaxValue || 0)}
-            </td>
-          </tr>
-          {/* NET TOTAL */}
-          <tr className="border-t-2 border-slate-800">
-            <td className="border-r border-slate-800 py-2 px-2 text-right font-bold text-[11px]">NET TOTAL</td>
-            <td className="py-2 px-2 text-right whitespace-nowrap font-bold text-[11px]">
-              {fmtInvoiceCurrency(payment.balanceValue)}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      {/* ── Bank & Footer ── */}
-      <div className="grid grid-cols-[1fr_auto] border-b border-slate-800">
-        {/* Left: Bank info */}
-        <div className="border-r border-slate-800 p-2 text-[9px] space-y-0.5">
-          <p className="font-bold text-[10px]">Bank Name: Kasikorn Bank</p>
-          <p>Branch Name: Big C Rayong, Thailand</p>
-          <p>Swift/Sort Code: KASITHBK</p>
-          <p>Address: 15/11 Choeng Noen, Muang Rayong, Big C Supercenter Building, Floor 1,</p>
-          <p>Room No.Ger 115 / 2a, Bang Na-Trat, Rayong, Thailand 21000</p>
-          <p className="text-red-600 font-bold">Bank Account number: 067-150-5530</p>
-          <p>Tel: +66(0)38-911771, 38-911774</p>
-          <p>Fax 038-911776</p>
-          <p>Fax 038-911777</p>
-        </div>
-        {/* Right spacer to align with table */}
-        <div className="w-36"></div>
-      </div>
-
-      {/* ── Conditions & Signatures ── */}
-      <div className="border-b border-slate-800">
-        <div className="px-2 py-1 text-[10px] font-semibold border-b border-slate-800">
-          เงื่อนไขการชำระเงินตามหน้านี้
-        </div>
-        <div className="grid grid-cols-2">
-          {/* Left: CMG signature */}
-          <div className="border-r border-slate-800 p-3 text-[9px] space-y-6">
-            <p className="text-[9px] text-slate-700">The cheque payment will be complete when we receive the money as a payment condition.</p>
-            <div className="mt-8">
-              <div className="border-t border-slate-800 w-40 mx-auto pt-1 text-center">
-                <p className="font-semibold text-[10px]">Authorized Signature</p>
-                <p className="text-[10px]">CMG</p>
+        {/* ── Footer ── */}
+        <div className="flex border border-t-0 border-black text-[11px]">
+          <div className="w-[60%] border-r border-black p-2 flex flex-col justify-between" style={{ minHeight: '130px' }}>
+            <div className="font-semibold leading-tight pt-1 pl-1">
+              <p>The cheque payment will be complete when we receive the money</p>
+              <p>as a payment condition.</p>
+            </div>
+            <div className="mt-8 flex flex-col items-center pl-10 pr-16">
+              <div className="border-t-[1.5px] border-black w-48 text-center pt-1 mb-1 font-semibold text-[10px]">
+                Authorized Signature
               </div>
-              <div className="mt-2 flex items-center gap-1">
+              <div className="font-semibold text-[10px]">CMG</div>
+              <div className="w-48 flex mt-3 font-semibold text-[10px]">
                 <span>Date :</span>
-                <span className="flex-1 border-b border-slate-800"></span>
               </div>
             </div>
           </div>
-          {/* Right: Client signature */}
-          <div className="p-3 text-[9px] space-y-6">
-            <p className="text-center text-[10px] font-semibold">Received Invoice</p>
-            <div className="mt-8">
-              <div className="border-t border-slate-800 w-40 mx-auto pt-1 text-center">
-                <p className="font-semibold text-[10px]">Authorized Signature</p>
-                <p className="text-[10px]">Name</p>
+          
+          <div className="w-[40%] p-2 flex flex-col justify-between items-center" style={{ minHeight: '130px' }}>
+            <div className="mt-3 font-semibold">
+              Received Invoice
+            </div>
+            <div className="mt-8 w-full flex flex-col items-center">
+              <div className="border-t-[1.5px] border-black w-48 text-center pt-1 mb-1 font-semibold text-[10px]">
+                Authorized Signature
               </div>
-              <div className="mt-2 flex items-center gap-1">
+              <div className="font-semibold text-[10px]">Name</div>
+              <div className="w-48 flex mt-3 font-semibold text-[10px]">
                 <span>Date :</span>
-                <span className="flex-1 border-b border-slate-800"></span>
               </div>
             </div>
           </div>
@@ -377,7 +408,7 @@ export default function InvoiceModal({ payment, onClose }) {
     >
       {showPreview ? (
         <div className="space-y-4">
-          <div className="overflow-auto max-h-[60vh] print:max-h-none">
+          <div className="max-w-none">
             {invoicePreview}
           </div>
           <p className="text-xs text-slate-400 text-center hidden print:block">

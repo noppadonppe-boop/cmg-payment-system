@@ -242,12 +242,15 @@ export default function PaymentCreateModal({ projects, onClose }) {
   // Calculate base value for retention reduce
   const getRetentionReduceBase = () => {
     if (retentionReduceTiming === 'before') {
-      // หักก่อน - คำนวณจาก Grand Total (ก่อนหัก Advance Deduction)
-      return grandTotal
+      // หักก่อน - คำนวณจากผลรวมของ Main + COA เท่านั้น (ไม่รวม Other Claim)
+      let base = 0
+      if (claimMainContract) base += calculateMainContractTotal()
+      if (claimCOA) base += calculateAllCOATotal()
+      return base
     } else {
-      // หักหลัง VAT - คำนวณจาก Total Claim Value + VAT
-      const totalClaimValue = grandTotal - calculateAdvanceDeduction()
-      return totalClaimValue * 1.07
+      // หักหลัง - คำนวณจาก Total Claim Value (หลังหัก Advance) × 1.07
+      const tcv = grandTotal - calculateAdvanceDeduction()
+      return tcv * 1.07
     }
   }
 
@@ -363,26 +366,27 @@ export default function PaymentCreateModal({ projects, onClose }) {
   // Use grand total for calculations
   const grandTotal = calculateGrandTotal()
   const adv = calculateAdvanceDeduction()
-  const totalClaimValue = grandTotal - adv // Total Claim Value หลังหัก Advance
-  
   const ret = calculateRetentionReduce()
   const withTaxPercent = parseCurrency(form.withTaxPercent)
   
+  // Compute the Main+COA sum (without Other Claim)
+  const mainCOASum = (claimMainContract ? calculateMainContractTotal() : 0) + (claimCOA ? calculateAllCOATotal() : 0)
+
+  // displayedTCV: ยอดที่แสดงใน Total Claim Value (เปลี่ยนตาม timing)
+  //   หักก่อน: (Main+COA) - Retention - Advance + Other Claim
+  //   หักหลัง: (Main+COA+Other) - Advance = grandTotal - adv
+  const displayedTCV = retentionReduceTiming === 'before'
+    ? mainCOASum - ret - adv + parseCurrency(form.otherClaim)
+    : grandTotal - adv
+
   // Calculate balance based on retention reduce timing
-  let grossClaim, withTaxAmount, balance
-  
-  if (retentionReduceTiming === 'before') {
-    // หักก่อน: (Grand Total - Retention - Advance) × 1.07 - With Tax
-    const afterRetentionAndAdvance = grandTotal - ret - adv
-    grossClaim = afterRetentionAndAdvance * 1.07
-    withTaxAmount = (afterRetentionAndAdvance * withTaxPercent) / 100
-    balance = grossClaim - withTaxAmount
-  } else {
-    // หักหลัง VAT: (Total Claim Value × 1.07) - Retention - With Tax
-    grossClaim = totalClaimValue * 1.07
-    withTaxAmount = (totalClaimValue * withTaxPercent) / 100
-    balance = grossClaim - ret - withTaxAmount
-  }
+  //   หักก่อน: Retention อยู่ใน TCV แล้ว → Balance = TCV × 1.07 - With Tax
+  //   หักหลัง: Balance = TCV × 1.07 - Retention - With Tax
+  const grossClaim = displayedTCV * 1.07
+  const withTaxAmount = (displayedTCV * withTaxPercent) / 100
+  const balance = retentionReduceTiming === 'before'
+    ? grossClaim - withTaxAmount
+    : grossClaim - ret - withTaxAmount
 
   const validate = () => {
     const errs = {}
@@ -462,33 +466,25 @@ export default function PaymentCreateModal({ projects, onClose }) {
       
       // Calculate deductions
       const finalAdvanceDeduction = calculateAdvanceDeduction()
-      const totalClaimValue = grandTotal - finalAdvanceDeduction // Total Claim Value หลังหัก Advance
-      
       const finalRetentionReduce = calculateRetentionReduce()
-      
-      // Recalculate financial values based on Total Claim Value
-      let finalValue = totalClaimValue
+      const finalWithTaxPercent = parseCurrency(form.withTaxPercent)
       const finalAdv = finalAdvanceDeduction
       const finalRet = finalRetentionReduce
-      const finalWithTaxPercent = parseCurrency(form.withTaxPercent)
       
-      // Calculate balance based on retention reduce timing
-      let finalGrossClaim, finalWithTaxAmount, finalBalance
+      // Compute Main+COA sum (without Other Claim)
+      const finalMainCOASum = (claimMainContract ? calculateMainContractTotal() : 0) + (claimCOA ? calculateAllCOATotal() : 0)
       
-      if (retentionReduceTiming === 'before') {
-        // หักก่อน: (Grand Total - Retention - Advance) × 1.07 - With Tax
-        const afterRetentionAndAdvance = grandTotal - finalRet - finalAdv
-        finalGrossClaim = afterRetentionAndAdvance * 1.07
-        finalWithTaxAmount = (afterRetentionAndAdvance * finalWithTaxPercent) / 100
-        finalBalance = finalGrossClaim - finalWithTaxAmount
-        // Update finalValue for saving - should be the net amount after retention and advance
-        finalValue = afterRetentionAndAdvance
-      } else {
-        // หักหลัง VAT: (Total Claim Value × 1.07) - Retention - With Tax
-        finalGrossClaim = finalValue * 1.07
-        finalWithTaxAmount = (finalValue * finalWithTaxPercent) / 100
-        finalBalance = finalGrossClaim - finalRet - finalWithTaxAmount
-      }
+      // displayedTCV mirrors what is shown in the UI
+      const finalTCV = retentionReduceTiming === 'before'
+        ? finalMainCOASum - finalRet - finalAdv + parseCurrency(form.otherClaim)
+        : grandTotal - finalAdv
+      
+      let finalValue = finalTCV
+      const finalGrossClaim = finalTCV * 1.07
+      const finalWithTaxAmount = (finalTCV * finalWithTaxPercent) / 100
+      const finalBalance = retentionReduceTiming === 'before'
+        ? finalGrossClaim - finalWithTaxAmount
+        : finalGrossClaim - finalRet - finalWithTaxAmount
       
       // Prepare payment data
       const paymentData = {
@@ -1090,7 +1086,7 @@ export default function PaymentCreateModal({ projects, onClose }) {
             <span className="text-sm font-semibold text-white">Financial Calculation</span>
           </div>
           <div className="p-3 space-y-2">
-            {/* Grand Total Display - After Advance Deduction */}
+            {/* Total Claim Value Display */}
             {(claimMainContract || claimCOA) && (
               <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-3">
                 <div className="flex items-center justify-between">
@@ -1101,20 +1097,20 @@ export default function PaymentCreateModal({ projects, onClose }) {
                       {claimMainContract && !claimCOA && 'Main Contract'}
                       {!claimMainContract && claimCOA && 'COA'}
                       {parseCurrency(form.otherClaim) > 0 && ' + Other Claim'}
-                      {useAdvanceDeduction && ' (After Advance Deduction)'}
+                      {useRetentionReduce && retentionReduceTiming === 'before' && ' - Retention Reduce'}
+                      {useAdvanceDeduction && ' - Advance Deduction'}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-blue-700">
-                      ฿{(grandTotal - adv).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ฿{displayedTCV.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
-                    {(useAdvanceDeduction && adv > 0) || parseCurrency(form.otherClaim) > 0 ? (
-                      <p className="text-xs text-slate-500 mt-1">
-                        {parseCurrency(form.otherClaim) > 0 && `Original: ฿${(grandTotal - parseCurrency(form.otherClaim)).toLocaleString()}`}
-                        {parseCurrency(form.otherClaim) > 0 && ` + Other: ฿${parseCurrency(form.otherClaim).toLocaleString()}`}
-                        {useAdvanceDeduction && adv > 0 && ` - Advance: ฿${adv.toLocaleString()}`}
-                      </p>
-                    ) : null}
+                    <p className="text-xs text-slate-500 mt-1">
+                      ฿{mainCOASum.toLocaleString()}
+                      {parseCurrency(form.otherClaim) > 0 && ` + ฿${parseCurrency(form.otherClaim).toLocaleString()}`}
+                      {useRetentionReduce && ret > 0 && retentionReduceTiming === 'before' && ` - Retention ฿${ret.toLocaleString()}`}
+                      {useAdvanceDeduction && adv > 0 && ` - Advance ฿${adv.toLocaleString()}`}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1251,7 +1247,11 @@ export default function PaymentCreateModal({ projects, onClose }) {
             )}>
               <div className="text-sm text-slate-600">
                 <span className="font-medium">Balance Value</span>
-                <span className="text-slate-400 ml-2 text-xs">= (Total Claim × 1.07) - Retention - With Tax</span>
+                <span className="text-slate-400 ml-2 text-xs">
+                  {retentionReduceTiming === 'before'
+                    ? '= (Total Claim × 1.07) - With Tax'
+                    : '= (Total Claim × 1.07) - Retention - With Tax'}
+                </span>
               </div>
               <span className={clsx(
                 'text-lg font-bold',
@@ -1280,14 +1280,14 @@ export default function PaymentCreateModal({ projects, onClose }) {
 
 export function Modal({ title, subtitle, onClose, children, maxWidth = 'max-w-4xl' }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:static print:block print:p-0">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:static print:block print:p-0 print:bg-white print:z-auto">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm print:hidden" onClick={onClose} />
 
       {/* Panel */}
       <div className={clsx('relative bg-white rounded-2xl shadow-2xl w-full flex flex-col max-h-[90vh] print:static print:block print:max-h-none print:shadow-none print:rounded-none', maxWidth)}>
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-100 shrink-0">
+        <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-100 shrink-0 print:hidden">
           <div>
             <h2 className="text-base font-bold text-slate-800">{title}</h2>
             {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}

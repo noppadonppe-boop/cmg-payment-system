@@ -58,7 +58,7 @@ const NAV_ITEMS = [
   },
 ]
 
-export default function Sidebar({ collapsed, onToggle }) {
+export default function Sidebar({ collapsed, onToggle, className }) {
   const { userProfile } = useAuth()
   const location = useLocation()
 
@@ -71,7 +71,8 @@ export default function Sidebar({ collapsed, onToggle }) {
     <aside
       className={clsx(
         'flex flex-col bg-slate-900 text-slate-100 transition-all duration-300 ease-in-out shrink-0',
-        collapsed ? 'w-16' : 'w-60'
+        collapsed ? 'w-16' : 'w-60',
+        className
       )}
     >
       {/* Brand */}

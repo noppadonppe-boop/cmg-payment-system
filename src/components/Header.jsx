@@ -39,7 +39,7 @@ function getPageTitle(pathname) {
   return PAGE_TITLES[pathname] ?? 'CMG Payment System'
 }
 
-export default function Header() {
+export default function Header({ className }) {
   const { currentUser, userProfile, sessionMinutesLeft, refreshProfile } = useAuth()
   const [open, setOpen] = useState(false)
   const [showEditPhone, setShowEditPhone] = useState(false)
@@ -72,7 +72,7 @@ export default function Header() {
 
   return (
     <>
-    <header className="flex items-center justify-between px-6 py-3.5 bg-white border-b border-slate-200 shrink-0">
+    <header className={clsx("flex items-center justify-between px-6 py-3.5 bg-white border-b border-slate-200 shrink-0", className)}>
       {/* Page Title */}
       <div>
         <h1 className="text-lg font-semibold text-slate-800">{title}</h1>
