@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { Send, Hash, Calendar, Paperclip, FileText, Calculator, Printer, Eye, ArrowLeft } from 'lucide-react'
 import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
@@ -12,7 +12,9 @@ import THBText from 'thai-baht-text'
 
 function fmtCurrency(val) {
   if (!val && val !== 0) return '—'
-  return `฿${new Intl.NumberFormat('en-US').format(val)}`
+  // ปัดเศษทศนิยมตำแหน่งที่ 3: 5 ขึ้นไปปัดขึ้น, 4 ลงมาปัดลง
+  const rounded = Math.round(val * 100) / 100
+  return `฿${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rounded)}`
 }
 
 export default function InvoiceModal({ payment, onClose }) {
@@ -55,7 +57,9 @@ export default function InvoiceModal({ payment, onClose }) {
 
   const fmtInvoiceCurrency = (val) => {
     if (!val && val !== 0) return '—'
-    return `${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)} B`
+    // ปัดเศษทศนิยมตำแหน่งที่ 3: 5 ขึ้นไปปัดขึ้น, 4 ลงมาปัดลง
+    const rounded = Math.round(val * 100) / 100
+    return `${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rounded)} B`
   }
 
   const fmtInvoiceDate = (d) => {
@@ -127,13 +131,22 @@ export default function InvoiceModal({ payment, onClose }) {
     window.print()
   }
 
-  const itemSum = (payment.claimMainContract || payment.claimCOA)
-    ? (payment.mainContractItems?.reduce((acc, it) => acc + (it.value || 0), 0) || 0) +
-      (payment.coaItems?.reduce((acc, coa) => acc + (coa.items?.reduce((s, it) => s + (it.value || 0), 0) || 0), 0) || 0)
-    : payment.value;
+  // คำนวณมูลค่ารวมของรายการ (Main Contract + COA + Other Claim)
+  let itemSum = 0
+  if (payment.claimMainContract || payment.claimCOA) {
+    itemSum = (payment.mainContractItems?.reduce((acc, it) => acc + (it.value || 0), 0) || 0) +
+              (payment.coaItems?.reduce((acc, coa) => acc + (coa.items?.reduce((s, it) => s + (it.value || 0), 0) || 0), 0) || 0)
+  } else {
+    itemSum = payment.value
+  }
+  
+  // Other Claim เป็นการหัก ไม่ใช่เพิ่ม
+  if (payment.otherClaim && payment.otherClaim > 0) {
+    itemSum -= payment.otherClaim
+  }
 
-  const displayVat = payment.vatValue ?? (payment.value * 0.07);
-  const visualTotal = itemSum + displayVat;
+  const displayVat = payment.vatValue ?? (itemSum * 0.07)
+  const visualTotal = itemSum + displayVat
 
   const invoicePreview = (
     <div className="print-area flex justify-center bg-slate-100 py-8 print:p-0 print:bg-white overflow-auto max-h-[70vh] print:max-h-none print:overflow-visible">
@@ -271,7 +284,7 @@ export default function InvoiceModal({ payment, onClose }) {
 
             {/* COA Items */}
             {payment.claimCOA && payment.coaItems?.map((coa, cidx) => (
-              <React.Fragment key={`coa-${cidx}`}>
+              <Fragment key={`coa-${cidx}`}>
                 <tr>
                   <td className="border-r border-black pl-5 pr-3 py-1 align-top font-bold">
                     {coa.coaNo}
@@ -288,8 +301,20 @@ export default function InvoiceModal({ payment, onClose }) {
                     </td>
                   </tr>
                 ))}
-              </React.Fragment>
+              </Fragment>
             ))}
+
+            {/* Other Claim - แสดงเป็นรายการหัก */}
+            {payment.otherClaim && payment.otherClaim > 0 && (
+              <tr>
+                <td className="border-r border-black pl-5 pr-3 py-1 align-top font-semibold text-rose-700">
+                  <span className="underline">Deduct</span> Other Claim
+                </td>
+                <td className="pr-6 py-1 align-top text-right font-bold text-[11px] text-rose-700">
+                  -{fmtInvoiceCurrency(payment.otherClaim)}
+                </td>
+              </tr>
+            )}
 
             {/* Filler Row to push height and keep the invoice layout consistent */}
             <tr>
@@ -298,6 +323,15 @@ export default function InvoiceModal({ payment, onClose }) {
             </tr>
 
             {/* Financial Summary Rows - NO internal borders */}
+            {/* Advance Deduction - แสดงก่อน VAT */}
+            {payment.advanceDeduction && payment.advanceDeduction > 0 && (
+              <tr>
+                <td className="border-r border-black text-right pr-4 py-1 font-bold text-[11px] leading-tight">
+                  <span className="underline">Deduct</span> Advance Payment
+                </td>
+                <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(payment.advanceDeduction)}</td>
+              </tr>
+            )}
             <tr>
               <td className="border-r border-black text-right pr-4 py-1 font-bold text-[11px] leading-tight">VAT 7%</td>
               <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(displayVat)}</td>

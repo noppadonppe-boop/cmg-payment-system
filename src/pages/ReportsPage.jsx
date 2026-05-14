@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext'
 import Card, { CardHeader } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import { clsx } from 'clsx'
+import { getPaymentCOAAmounts, getPaymentsForCOA } from '../lib/coaPayments'
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 function fmt(val) {
@@ -555,10 +556,14 @@ function Report2({ projects, coas, cors, payments, selectedProject }) {
   const rows = filteredCOAs.map(coa => {
     const proj       = projects.find(p => p.id === coa.projectId)
     const cor        = cors.find(c => c.id === coa.corId)
-    const coaPays    = payments.filter(p => p.coaId === coa.id && p.type === 'coa')
-    const received   = coaPays.filter(p => p.status === 'Received').reduce((s, p) => s + (p.balanceValue || 0), 0)
-    const submitted  = coaPays.filter(p => p.status === 'Submitted').reduce((s, p) => s + (p.balanceValue || 0), 0)
-    const retention  = coaPays.reduce((s, p) => s + (p.retentionReduce || 0), 0)
+    const coaPays    = getPaymentsForCOA(payments, coa)
+    const received   = coaPays
+      .filter(p => p.status === 'Received')
+      .reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).balanceValue, 0)
+    const submitted  = coaPays
+      .filter(p => p.status === 'Submitted')
+      .reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).balanceValue, 0)
+    const retention  = coaPays.reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).deductionsValue, 0)
     const balance    = coa.value - received - submitted
     const progress   = pct(received + submitted, coa.value)
     return { coa, proj, cor, received, submitted, retention, balance, progress, claimsCount: coaPays.length }

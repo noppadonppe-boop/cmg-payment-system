@@ -12,6 +12,7 @@ import Card, { CardHeader } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import { AttachmentLink } from '../components/ui/AttachmentField'
 import { clsx } from 'clsx'
+import { getPaymentCOAAmounts, getPaymentsForCOA } from '../lib/coaPayments'
 
 const TABS = [
   { id: 'general',   label: 'General',    icon: Info },
@@ -205,8 +206,8 @@ function DetailContract({ project, projectCOAs }) {
     const coa = projectCOAs.find(c => c.id === coaId)
     if (!coa) return 0
     
-    const coaPayments = payments.filter(p => p.coaId === coaId && p.type === 'coa')
-    const totalClaimed = coaPayments.reduce((sum, p) => sum + (p.balanceValue || 0), 0)
+    const coaPayments = getPaymentsForCOA(payments, coa)
+    const totalClaimed = coaPayments.reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).balanceValue, 0)
     
     return (coa.value || 0) - totalClaimed
   }

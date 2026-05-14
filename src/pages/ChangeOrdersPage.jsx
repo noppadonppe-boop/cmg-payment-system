@@ -12,9 +12,11 @@ import Badge from '../components/ui/Badge'
 import { clsx } from 'clsx'
 import CORCreateModal from '../components/changeorders/CORCreateModal'
 import CORDetailModal from '../components/changeorders/CORDetailModal'
+import COADetailModal from '../components/changeorders/COADetailModal'
 import ConvertToCOAModal from '../components/changeorders/ConvertToCOAModal'
 import COAPaymentModal from '../components/changeorders/COAPaymentModal'
 import COAStampUploadModal from '../components/changeorders/COAStampUploadModal'
+import { getPaymentCOAAmounts, getPaymentsForCOA } from '../lib/coaPayments'
 
 export const COR_STATUS_CONFIG = {
   'Prepare doc': { badge: 'slate',   icon: Clock,        label: 'Prepare Doc'  },
@@ -51,6 +53,7 @@ export default function ChangeOrdersPage() {
   const [tab, setTab]                 = useState('cor')  // 'cor' | 'coa'
   const [createCOROpen, setCreateCOROpen]   = useState(false)
   const [detailCOR, setDetailCOR]           = useState(null)
+  const [detailCOA, setDetailCOA]           = useState(null)
   const [editCOR, setEditCOR]               = useState(null)
   const [convertCOR, setConvertCOR]         = useState(null)
   const [coaPaymentCOA, setCoaPaymentCOA]   = useState(null)
@@ -65,6 +68,7 @@ export default function ChangeOrdersPage() {
   const visibleCORs = cors.filter(c => {
     if (!hasProjectAccess(c.projectId)) return false
     if (selectedProjectId !== 'all' && c.projectId !== selectedProjectId) return false
+    if (c.convertedToCOA) return false
     return true
   })
 
@@ -76,11 +80,12 @@ export default function ChangeOrdersPage() {
 
   // Stats
   const allCORs = cors.filter(c => hasProjectAccess(c.projectId))
+  const openCORs = allCORs.filter(c => !c.convertedToCOA)
   const allCOAs = coas.filter(c => hasProjectAccess(c.projectId))
   const stats = {
-    totalCOR:   allCORs.length,
-    prepDoc:    allCORs.filter(c => c.status === 'Prepare doc').length,
-    submitted:  allCORs.filter(c => c.status === 'Submitted').length,
+    totalCOR:   openCORs.length,
+    prepDoc:    openCORs.filter(c => c.status === 'Prepare doc').length,
+    submitted:  openCORs.filter(c => c.status === 'Submitted').length,
     converted:  allCORs.filter(c => c.convertedToCOA).length,
     totalCOA:   allCOAs.length,
     stampCompleted: allCOAs.filter(c => c.stampUploadedAt).length,
@@ -88,8 +93,7 @@ export default function ChangeOrdersPage() {
   }
 
   // Get COA payment summary
-  const getCOAPayment = (coaId) =>
-    payments.filter(p => p.coaId === coaId && p.type === 'coa')
+  const getCOAPayment = (coa) => getPaymentsForCOA(payments, coa)
 
   return (
     <div className="space-y-6">
@@ -212,7 +216,7 @@ export default function ChangeOrdersPage() {
               const project  = projects.find(p => p.id === coa.projectId)
               const cor      = cors.find(c => c.id === coa.corId)
               const approver = USERS.find(u => u.id === coa.approvedBy)
-              const coaPays  = getCOAPayment(coa.id)
+              const coaPays  = getCOAPayment(coa)
 
               return (
                 <COARow
@@ -225,6 +229,7 @@ export default function ChangeOrdersPage() {
                   currentUser={currentUser}
                   canDelete={isSuperAdmin}
                   canUploadStamp={isAccCMG}
+                  onView={() => setDetailCOA(coa)}
                   onManagePayment={() => setCoaPaymentCOA(coa)}
                   onUploadStamp={() => setStampUploadCOA(coa)}
                   onDelete={() => handleDeleteCOA(coa)}
@@ -257,6 +262,20 @@ export default function ChangeOrdersPage() {
           onConvert={() => { setDetailCOR(null); setConvertCOR(detailCOR) }}
         />
       )}
+      {detailCOA && (
+        <COADetailModal
+          coa={detailCOA}
+          onClose={() => setDetailCOA(null)}
+          onManagePayment={() => {
+            setDetailCOA(null)
+            setCoaPaymentCOA(detailCOA)
+          }}
+          onUploadStamp={() => {
+            setDetailCOA(null)
+            setStampUploadCOA(detailCOA)
+          }}
+        />
+      )}
       {convertCOR && (
         <ConvertToCOAModal
           cor={convertCOR}
@@ -284,7 +303,7 @@ export default function ChangeOrdersPage() {
 function CORRow({ cor, project, creator, sc, coa, canConvert, canEdit, canDelete, onView, onEdit, onConvert, onDelete }) {
   const StatusIcon = sc.icon
   return (
-    <Card padding={false} className="overflow-hidden hover:shadow-md transition-shadow">
+    <Card padding={false} className="overflow-hidden hover:shadow-md transition-shadow" onDoubleClick={onView}>
       <div className="flex">
         <div className={clsx(
           'w-1 shrink-0',
@@ -331,7 +350,7 @@ function CORRow({ cor, project, creator, sc, coa, canConvert, canEdit, canDelete
                 <p className="text-[9px] text-slate-400 font-medium uppercase tracking-wide">COR Value</p>
                 <p className="text-xs font-bold text-slate-800">{fmtCurrency(cor.value)}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" onDoubleClick={e => e.stopPropagation()}>
                 <button
                   onClick={onView}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
@@ -370,15 +389,18 @@ function CORRow({ cor, project, creator, sc, coa, canConvert, canEdit, canDelete
 }
 
 /* ─── COA Row ─────────────────────────────────────────────────────────────── */
-function COARow({ coa, cor, project, approver, payments, currentUser, canDelete, canUploadStamp, onManagePayment, onUploadStamp, onDelete }) {
-  const latestPay   = payments[payments.length - 1]
-  const totalPaid   = payments.filter(p => p.status === 'Received').reduce((s, p) => s + (p.balanceValue || 0), 0)
-  const balance     = (coa.value || 0) - totalPaid
+function COARow({ coa, cor, project, approver, payments, currentUser, canDelete, canUploadStamp, onView, onManagePayment, onUploadStamp, onDelete }) {
+  const totalClaimed = payments
+    .reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).claimValue, 0)
+  const totalPaid   = payments
+    .filter(p => p.status === 'Received')
+    .reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).balanceValue, 0)
+  const balance     = (coa.value || 0) - totalClaimed
 
   const canAct = ['PM', 'QsEng', 'AccCMG'].includes(currentUser.role)
 
   return (
-    <Card padding={false} className="overflow-hidden hover:shadow-md transition-shadow">
+    <Card padding={false} className="overflow-hidden hover:shadow-md transition-shadow" onDoubleClick={onView}>
       <div className="flex">
         <div className={clsx(
           'w-1 shrink-0',
@@ -431,7 +453,13 @@ function COARow({ coa, cor, project, approver, payments, currentUser, canDelete,
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" onDoubleClick={e => e.stopPropagation()}>
+                <button
+                  onClick={onView}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  <Eye size={13} /> Detail
+                </button>
                 {canAct && (
                   <Button variant="secondary" size="sm" icon={CreditCard} onClick={onManagePayment}>
                     Payments

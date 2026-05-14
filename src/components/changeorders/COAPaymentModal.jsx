@@ -16,10 +16,13 @@ import ReceivedModal from '../payments/ReceivedModal'
 import PaymentDetailModal from '../payments/PaymentDetailModal'
 import { MiniStepper, PAYMENT_STATUS } from '../../pages/PaymentsPage'
 import { clsx } from 'clsx'
+import { getPaymentCOAAmounts, getPaymentsForCOA } from '../../lib/coaPayments'
 
 function fmtCurrency(val) {
   if (!val && val !== 0) return '—'
-  return `฿${new Intl.NumberFormat('en-US').format(val)}`
+  // ปัดเศษทศนิยมตำแหน่งที่ 3: 5 ขึ้นไปปัดขึ้น, 4 ลงมาปัดลง
+  const rounded = Math.round(val * 100) / 100
+  return `฿${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rounded)}`
 }
 
 function fmtDate(d) {
@@ -32,11 +35,11 @@ export default function COAPaymentModal({ coa, onClose }) {
   const { currentUser, USERS, can } = useAuth()
 
   const project    = projects.find(p => p.id === coa.projectId)
-  const coaPayments = payments.filter(p => p.coaId === coa.id && p.type === 'coa')
+  const coaPayments = getPaymentsForCOA(payments, coa)
 
   const totalReceived = coaPayments
     .filter(p => p.status === 'Received')
-    .reduce((s, p) => s + (p.balanceValue || 0), 0)
+    .reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).balanceValue, 0)
   const balance = (coa.value || 0) - totalReceived
 
   const isPM     = can('canApprovePayments')
@@ -139,6 +142,7 @@ export default function COAPaymentModal({ coa, onClose }) {
                   const creator = USERS.find(u => u.id === pay.createdBy)
                   const actions = getActions(pay)
                   const StatusIcon = sc.icon
+                  const coaAmounts = getPaymentCOAAmounts(pay, coa)
 
                   return (
                     <div
@@ -174,15 +178,15 @@ export default function COAPaymentModal({ coa, onClose }) {
                               <div className="grid grid-cols-3 gap-3 text-right text-xs">
                                 <div>
                                   <p className="text-slate-400">Value</p>
-                                  <p className="font-semibold text-slate-700">{fmtCurrency(pay.value)}</p>
+                                  <p className="font-semibold text-slate-700">{fmtCurrency(coaAmounts.claimValue)}</p>
                                 </div>
                                 <div>
                                   <p className="text-slate-400">Deductions</p>
-                                  <p className="font-medium text-rose-500">−{fmtCurrency((pay.advanceDeduction||0)+(pay.retentionReduce||0))}</p>
+                                  <p className="font-medium text-rose-500">−{fmtCurrency(coaAmounts.deductionsValue)}</p>
                                 </div>
                                 <div>
                                   <p className="text-slate-400">Balance</p>
-                                  <p className="font-bold text-emerald-700">{fmtCurrency(pay.balanceValue)}</p>
+                                  <p className="font-bold text-emerald-700">{fmtCurrency(coaAmounts.balanceValue)}</p>
                                 </div>
                               </div>
 
@@ -256,7 +260,7 @@ function COAPaymentCreateModal({ coa, project, onClose }) {
   const { addPayment, payments } = useData()
   const { currentUser } = useAuth()
 
-  const existing = payments.filter(p => p.coaId === coa.id && p.type === 'coa').length
+  const existing = getPaymentsForCOA(payments, coa).length
   const prefix   = project?.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 3) ?? 'COA'
 
   const [form, setForm] = useState({

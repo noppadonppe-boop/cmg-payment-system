@@ -11,7 +11,9 @@ import { clsx } from 'clsx'
 
 function fmtCurrency(val) {
   if (!val && val !== 0) return '—'
-  return `฿${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)}`
+  // ปัดเศษทศนิยมตำแหน่งที่ 3: 5 ขึ้นไปปัดขึ้น, 4 ลงมาปัดลง
+  const rounded = Math.round(val * 100) / 100
+  return `฿${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rounded)}`
 }
 
 function ReadOnlyField({ label, value, className = '' }) {

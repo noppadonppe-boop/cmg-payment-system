@@ -1278,7 +1278,7 @@ export default function PaymentCreateModal({ projects, onClose }) {
   )
 }
 
-export function Modal({ title, subtitle, onClose, children, maxWidth = 'max-w-4xl' }) {
+export function Modal({ title, subtitle, onClose, children, maxWidth = 'max-w-4xl', headerRight = null }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:static print:block print:p-0 print:bg-white print:z-auto">
       {/* Backdrop */}
@@ -1288,16 +1288,19 @@ export function Modal({ title, subtitle, onClose, children, maxWidth = 'max-w-4x
       <div className={clsx('relative bg-white rounded-2xl shadow-2xl w-full flex flex-col max-h-[90vh] print:static print:block print:max-h-none print:shadow-none print:rounded-none', maxWidth)}>
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-100 shrink-0 print:hidden">
-          <div>
+          <div className="min-w-0">
             <h2 className="text-base font-bold text-slate-800">{title}</h2>
             {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors shrink-0 mt-0.5"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-start gap-3 shrink-0">
+            {headerRight}
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors shrink-0 mt-0.5"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
