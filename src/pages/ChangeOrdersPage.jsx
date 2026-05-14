@@ -34,6 +34,17 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function getPaymentReceivedValue(payment, coa) {
+  const amounts = getPaymentCOAAmounts(payment, coa)
+  if (!amounts.claimValue) return 0
+
+  if (payment.status === 'Received' || payment.status === 'Completed') {
+    return payment.receivedValue ?? payment.incomeConfirmedAmount ?? amounts.balanceValue ?? payment.balanceValue ?? 0
+  }
+
+  return 0
+}
+
 export default function ChangeOrdersPage() {
   const { projects, cors, coas, payments, deleteCOR, deleteCOA } = useData()
   const { currentUser, can, hasProjectAccess, USERS, userProfile } = useAuth()
@@ -393,8 +404,7 @@ function COARow({ coa, cor, project, approver, payments, currentUser, canDelete,
   const totalClaimed = payments
     .reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).claimValue, 0)
   const totalPaid   = payments
-    .filter(p => p.status === 'Received')
-    .reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).balanceValue, 0)
+    .reduce((sum, payment) => sum + getPaymentReceivedValue(payment, coa), 0)
   const balance     = (coa.value || 0) - totalClaimed
 
   const canAct = ['PM', 'QsEng', 'AccCMG'].includes(currentUser.role)

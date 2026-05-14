@@ -100,9 +100,14 @@ export default function COADetailModal({ coa, onClose, onManagePayment, onUpload
   const stampUploader = USERS.find(u => u.id === coa.stampUploadedBy)
   const coaPayments = getPaymentsForCOA(payments, coa)
   const sortedCoaPayments = [...coaPayments].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-  const receivedPayments = coaPayments.filter(p => p.status === 'Received')
   const totalClaimed = coaPayments.reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).claimValue, 0)
-  const totalPaid = receivedPayments.reduce((sum, pay) => sum + getPaymentCOAAmounts(pay, coa).balanceValue, 0)
+  const totalPaid = coaPayments.reduce((sum, payment) => {
+    const amounts = getPaymentCOAAmounts(payment, coa)
+    if (payment.status === 'Received' || payment.status === 'Completed') {
+      return sum + (payment.receivedValue ?? payment.incomeConfirmedAmount ?? amounts.balanceValue ?? payment.balanceValue ?? 0)
+    }
+    return sum
+  }, 0)
   const balance = (coa.value || 0) - totalClaimed
   const claimedPct = pct(totalClaimed, coa.value || 0)
   const balancePct = pct(balance, coa.value || 0)
