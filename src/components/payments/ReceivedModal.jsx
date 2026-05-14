@@ -77,7 +77,6 @@ export default function ReceivedModal({ payment, onClose, onRequestRevision }) {
       status: 'Income Confirm Pending',
       acceptedBy: currentUser.id,
       acceptedAt: new Date().toISOString().split('T')[0],
-      receivedDate: new Date().toISOString().split('T')[0],
       incomeConfirmedDate: new Date().toISOString().split('T')[0],
       incomeConfirmedAmount: payment.balanceValue || 0,
       incomeConfirmedBy: currentUser.id,
@@ -95,10 +94,8 @@ export default function ReceivedModal({ payment, onClose, onRequestRevision }) {
       status: 'Completed',
       receivedBy: currentUser.id,
       receivedAt: new Date().toISOString().split('T')[0],
-      receivedDate: new Date().toISOString().split('T')[0],
+      receivedDate: form.collectionDate, // ใช้วันที่รับเงินจาก Stage 3.1
       receivedNote: form.receivedNote,
-      receiptGeneratedAt: new Date().toISOString(),
-      receiptGeneratedBy: currentUser.id,
       incomeConfirmedAmount: payment.incomeConfirmedAmount || payment.balanceValue || 0,
       // Payment collection info
       paymentType: form.paymentType,

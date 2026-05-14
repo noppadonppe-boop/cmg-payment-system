@@ -388,15 +388,9 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
 
           {payment.receivedDate ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
-              <InfoRow label="Received Date" value={fmtDate(payment.receivedDate)} />
+              <InfoRow label="Payment Received" value={fmtDate(payment.collectionDate || payment.receivedDate)} />
               <InfoRow label="Confirmed By" value={receiver?.name} />
               <InfoRow label="Confirmed On" value={fmtDate(payment.receivedAt)} />
-              {payment.receiptGeneratedAt && (
-                <InfoRow
-                  label="Receipt Generated"
-                  value={fmtDate(payment.receiptGeneratedAt)}
-                />
-              )}
               {payment.receivedNote && <InfoRow label="Note" value={`"${payment.receivedNote}"`} />}
             </div>
           ) : (
