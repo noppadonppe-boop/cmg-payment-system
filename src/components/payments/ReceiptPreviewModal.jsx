@@ -102,7 +102,7 @@ export default function ReceiptPreviewModal({ payment, project, collectionData =
   }
   const contractNoString = contractNos.join(', ')
 
-  const receiptNo = payment.invoiceNo || payment.paymentNo || '—'
+  const receiptNo = cd.receiptNo || payment.receiptNo || '—'
   const receiptDate = fmtDate(cd.collectionDate || payment.invoiceDate || new Date().toISOString())
 
   // Build description lines

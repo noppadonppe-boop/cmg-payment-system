@@ -40,20 +40,20 @@ export default function ReceivedModal({ payment, onClose, onRequestRevision }) {
 
   // Form state for Stage 3.1
   const [form, setForm] = useState({
-    receiptNo: '',
-    receivedNote: '',
-    paymentType: '',     // 'cash' | 'cheque' | 'transfer'
-    cashAmount: '',
-    chequeNo: '',
-    chequeBank: '',
-    chequeBranch: '',
-    chequeDate: '',
-    transferAmount: '',
-    transferBank: '',
-    transferBranch: '',
-    transferDate: '',
-    collector: '',
-    collectionDate: new Date().toISOString().split('T')[0],
+    receiptNo: payment.receiptNo || '',
+    receivedNote: payment.receivedNote || '',
+    paymentType: payment.paymentType || '',     // 'cash' | 'cheque' | 'transfer'
+    cashAmount: payment.cashAmount || '',
+    chequeNo: payment.chequeNo || '',
+    chequeBank: payment.chequeBank || '',
+    chequeBranch: payment.chequeBranch || '',
+    chequeDate: payment.chequeDate || '',
+    transferAmount: payment.transferAmount || '',
+    transferBank: payment.transferBank || '',
+    transferBranch: payment.transferBranch || '',
+    transferDate: payment.transferDate || '',
+    collector: payment.collector || '',
+    collectionDate: payment.collectionDate || payment.receivedDate || new Date().toISOString().split('T')[0],
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
@@ -100,6 +100,7 @@ export default function ReceivedModal({ payment, onClose, onRequestRevision }) {
       receivedNote: form.receivedNote,
       incomeConfirmedAmount: payment.incomeConfirmedAmount || payment.balanceValue || 0,
       // Payment collection info
+      receiptNo: form.receiptNo,
       paymentType: form.paymentType,
       cashAmount: form.cashAmount,
       chequeNo: form.chequeNo,

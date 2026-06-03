@@ -97,9 +97,6 @@ export default function PaymentsPage() {
     // ถ้าเลือกสถานะเฉพาะ ให้กรองตามนั้น
     if (statusFilter !== 'all' && mappedStatus !== statusFilter) return false
     
-    // ค่าเริ่มต้น (all) ให้ซ่อนรายการที่เสร็จสมบูรณ์แล้ว (Completed) เพื่อไม่โชว์ประวัติเก่า
-    if (statusFilter === 'all' && mappedStatus === 'Completed') return false
-    
     return true
   })
 

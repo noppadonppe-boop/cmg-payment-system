@@ -203,9 +203,10 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
       if (claimCOA) base += calculateAllCOATotal()
       return base
     } else {
-      // หักหลัง - คำนวณจาก Total Claim Value (หลังหัก Advance) × 1.07
+      // หักหลัง - คำนวณจาก Total Claim Value (หลังหัก Advance) + VAT
       const tcv = grandTotal - calculateAdvanceDeduction()
-      return tcv * 1.07
+      const vatAmount = Math.round(tcv * 0.07 * 100) / 100
+      return tcv + vatAmount
     }
   }
 
@@ -335,13 +336,13 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
     : grandTotal - adv
 
   // Calculate balance based on retention reduce timing
-  //   หักก่อน: Retention อยู่ใน TCV แล้ว → Balance = TCV × 1.07 - With Tax
-  //   หักหลัง: Balance = TCV × 1.07 - Retention - With Tax
-  const grossClaim = displayedTCV * 1.07
-  const withTaxAmount = (displayedTCV * withTaxPercent) / 100
-  const balance = retentionReduceTiming === 'before'
-    ? grossClaim - withTaxAmount
-    : grossClaim - ret - withTaxAmount
+  const retForCalc = retentionReduceTiming === 'before' ? 0 : ret
+  const { grossClaim, withTaxAmount, balanceValue: balance } = calculatePaymentBalance(
+    displayedTCV,
+    0, // advance already deducted from displayedTCV in both cases
+    retForCalc,
+    withTaxPercent
+  )
 
   const validate = () => {
     const errs = {}
@@ -427,11 +428,13 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
         : grandTotal - finalAdv
       
       let finalValue = finalTCV
-      const finalGrossClaim = finalTCV * 1.07
-      const finalWithTaxAmount = (finalTCV * finalWithTaxPercent) / 100
-      const finalBalance = retentionReduceTiming === 'before'
-        ? finalGrossClaim - finalWithTaxAmount
-        : finalGrossClaim - finalRet - finalWithTaxAmount
+      const finalRetForCalc = retentionReduceTiming === 'before' ? 0 : finalRet
+      const { grossClaim: finalGrossClaim, withTaxAmount: finalWithTaxAmount, balanceValue: finalBalance } = calculatePaymentBalance(
+        finalTCV,
+        0, // advance already deducted from finalTCV
+        finalRetForCalc,
+        finalWithTaxPercent
+      )
       
       // Prepare payment data
       const paymentData = {

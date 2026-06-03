@@ -293,7 +293,22 @@ export function DataProvider({ children }) {
 
     const snapshot = (colName, setter) =>
       onSnapshot(col(colName), snap => {
-        const data = snap.docs.map(d => ({ ...d.data(), id: d.id }))
+        let data = snap.docs.map(d => ({ ...d.data(), id: d.id }))
+        
+        // Fix historical floating point errors for payments
+        if (colName === 'payments') {
+          data = data.map(p => {
+            if (p.value !== undefined) {
+              const val = p.value || 0
+              const vatAmount = Math.round(val * 0.07 * 100) / 100
+              const retDeduction = p.retentionReduceTiming === 'after' ? (p.retentionReduce || 0) : 0
+              const wht = Math.round((p.withTaxValue || 0) * 100) / 100
+              p.balanceValue = val + vatAmount - retDeduction - wht
+            }
+            return p
+          })
+        }
+        
         console.log(`Firestore ${colName} updated:`, data.length, 'items')
         setter(data)
         done()
