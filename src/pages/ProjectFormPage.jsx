@@ -24,12 +24,13 @@ const TABS = [
 const CONTRACT_TYPES = ['Lump Sum', 'Unit Rate', 'Cost Plus', 'GMP', 'Design & Build', 'Framework']
 const TAX_STATUS_OPTIONS = ['N/A', 'Not yet', 'Complete pay']
 const INSURANCE_TYPES = ['CAR', 'TPL', 'WC', 'EAR', 'Marine', 'Other']
+const PROJECT_STATUSES = ['Active', 'Prepare Budget', 'Completed', 'On Hold', 'Cancelled', 'Close']
 
 const EMPTY_BOND = { percent: '', value: '', bankName: '', attachment: '', startDate: '', endDate: '', note: '' }
 const EMPTY_INSURANCE = { id: '', no: '', name: '', detail: '', type: '', note: '' }
 
 const EMPTY_FORM = {
-  name: '', location: '', pmId: '', cmId: '', cm: '', mainContractor: '', subContractor: '', clientName: '',
+  jobNo: '', name: '', location: '', pmId: '', cmId: '', cm: '', mainContractor: '', subContractor: '', clientName: '',
   clientInfo: { name: '', address: '', tel: '', email: '', taxId: '', creditTerm: '' },
   contractNo: '', poNo: '', contractValue: '', contractAttachment: '', startDate: '', finishDate: '',
   contractType: 'Lump Sum', retentionRequired: false, retentionPercent: '', contractNote: '',
@@ -43,6 +44,7 @@ const EMPTY_FORM = {
   ],
   taxPay: '', taxStatusPay: 'N/A', taxNote: '',
   contractPenalty: '', otherConditions: '', conditionNote: '',
+  status: 'Active',
 }
 
 function formatCurrencyInput(val) {
@@ -91,6 +93,8 @@ export default function ProjectFormPage() {
           insurances: project.insurances?.length
             ? project.insurances.map((ins, i) => ({ ...EMPTY_INSURANCE, ...ins, id: ins.id || `i${i + 1}` }))
             : [{ ...EMPTY_INSURANCE, id: 'i1' }, { ...EMPTY_INSURANCE, id: 'i2' }, { ...EMPTY_INSURANCE, id: 'i3' }],
+          isMaster: project.isMaster || false,
+          masterKeys: project.masterKeys || [],
         })
       }
     }
@@ -138,6 +142,10 @@ export default function ProjectFormPage() {
   }
 
   const validate = () => {
+    if (isEditing) {
+      setErrors({})
+      return true
+    }
     const errs = {}
     if (!form.name?.trim()) errs.name = 'Project name is required'
     if (!form.clientName?.trim()) errs.clientName = 'Client name is required'
@@ -164,7 +172,16 @@ export default function ProjectFormPage() {
       retentionPercent: parseFloat(form.retentionPercent) || 0,
     }
     if (isEditing) {
-      await updateProject(id, payload)
+      const finalPayload = { ...payload }
+      if (form.isMaster && form.masterKeys) {
+        const localOverrides = ['pmId', 'cmId', 'pm', 'cm', 'contractNo', 'contractType', 'contractAttachment', 'finishDate']
+        form.masterKeys.forEach(k => {
+          if (!localOverrides.includes(k)) {
+            delete finalPayload[k]
+          }
+        })
+      }
+      await updateProject(id, finalPayload)
     } else {
       await addProject(payload)
     }
@@ -302,17 +319,34 @@ function TabGeneral({ form, set, errors, pmUsers, cmUsers }) {
   const setClientInfo = (field, value) => {
     set('clientInfo', { ...form.clientInfo, [field]: value })
   }
+  const isReadonly = (key) => form.isMaster && form.masterKeys?.includes(key)
 
   return (
     <div className="space-y-6">
       <SectionTitle title="General Information" subtitle="Basic project and stakeholder details" />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <FormField label="Project Name" required error={errors.name} className="md:col-span-2">
+        <FormField label="Project Status">
+          <Select value={form.status} onChange={e => set('status', e.target.value)}>
+            {PROJECT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </Select>
+        </FormField>
+
+        <FormField label="Project No.">
+          <Input
+            placeholder="e.g. PRJ-2026-001"
+            value={form.jobNo || ''}
+            onChange={e => set('jobNo', e.target.value)}
+            disabled={isReadonly('jobNo')}
+          />
+        </FormField>
+
+        <FormField label="Project Name" required error={errors.name}>
           <Input
             placeholder="e.g. Central Plaza Office Tower"
             value={form.name}
             onChange={e => set('name', e.target.value)}
             error={errors.name}
+            disabled={isReadonly('name')}
           />
         </FormField>
 
@@ -321,6 +355,7 @@ function TabGeneral({ form, set, errors, pmUsers, cmUsers }) {
             placeholder="City, Area"
             value={form.location}
             onChange={e => set('location', e.target.value)}
+            disabled={isReadonly('location')}
           />
         </FormField>
 
@@ -348,6 +383,7 @@ function TabGeneral({ form, set, errors, pmUsers, cmUsers }) {
             value={form.clientName}
             onChange={e => set('clientName', e.target.value)}
             error={errors.clientName}
+            disabled={isReadonly('clientName')}
           />
         </FormField>
 
@@ -356,6 +392,7 @@ function TabGeneral({ form, set, errors, pmUsers, cmUsers }) {
             placeholder="e.g. CMG Construction Co., Ltd."
             value={form.mainContractor}
             onChange={e => set('mainContractor', e.target.value)}
+            disabled={isReadonly('mainContractor')}
           />
         </FormField>
 
@@ -364,6 +401,7 @@ function TabGeneral({ form, set, errors, pmUsers, cmUsers }) {
             placeholder="e.g. ElectroPower Thailand"
             value={form.subContractor}
             onChange={e => set('subContractor', e.target.value)}
+            disabled={isReadonly('subContractor')}
           />
         </FormField>
       </div>
@@ -425,6 +463,8 @@ function TabGeneral({ form, set, errors, pmUsers, cmUsers }) {
 
 /* ─── Part 2: Contract ────────────────────────────────────────────────────── */
 function TabContract({ form, set, errors, projectId, currentUserId }) {
+  const isReadonly = (key) => form.isMaster && form.masterKeys?.includes(key)
+
   return (
     <div className="space-y-6">
       <SectionTitle title="Contract Details" subtitle="Financial and timeline information for the contract" />
@@ -435,6 +475,7 @@ function TabContract({ form, set, errors, projectId, currentUserId }) {
             value={form.contractNo}
             onChange={e => set('contractNo', e.target.value)}
             error={errors.contractNo}
+            disabled={isReadonly('contractNo')}
           />
         </FormField>
 
@@ -443,6 +484,7 @@ function TabContract({ form, set, errors, projectId, currentUserId }) {
             placeholder="e.g. PO-CP-2024-88"
             value={form.poNo}
             onChange={e => set('poNo', e.target.value)}
+            disabled={isReadonly('poNo')}
           />
         </FormField>
 
@@ -455,22 +497,23 @@ function TabContract({ form, set, errors, projectId, currentUserId }) {
               onChange={e => set('contractValue', parseCurrency(e.target.value))}
               error={errors.contractValue}
               className="pl-7"
+              disabled={isReadonly('contractValue')}
             />
           </div>
         </FormField>
 
         <FormField label="Contract Type">
-          <Select value={form.contractType} onChange={e => set('contractType', e.target.value)}>
+          <Select value={form.contractType} onChange={e => set('contractType', e.target.value)} disabled={isReadonly('contractType')}>
             {CONTRACT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </Select>
         </FormField>
 
         <FormField label="Start Date" required error={errors.startDate}>
-          <Input type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)} error={errors.startDate} />
+          <Input type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)} error={errors.startDate} disabled={isReadonly('startDate')} />
         </FormField>
 
         <FormField label="Finish Date" required error={errors.finishDate}>
-          <Input type="date" value={form.finishDate} onChange={e => set('finishDate', e.target.value)} error={errors.finishDate} />
+          <Input type="date" value={form.finishDate} onChange={e => set('finishDate', e.target.value)} error={errors.finishDate} disabled={isReadonly('finishDate')} />
         </FormField>
 
         <FormField label="Contract Attachment">
@@ -481,6 +524,7 @@ function TabContract({ form, set, errors, projectId, currentUserId }) {
             docId={projectId || ''}
             uploadedBy={currentUserId || ''}
             placeholder="Filename or URL หรือกด Upload"
+            disabled={isReadonly('contractAttachment')}
           />
         </FormField>
 

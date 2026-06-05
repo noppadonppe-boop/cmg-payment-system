@@ -39,6 +39,7 @@ type Tab = 'pending' | 'approved' | 'rejected' | 'all'
 export default function AdminPanel() {
   const { userProfile: me } = useAuth()
   const { projects } = useData()
+  const activeProjects = projects.filter(p => p.status?.toUpperCase() === 'ACTIVE')
   const [users,       setUsers]       = useState<UserProfile[]>([])
   const [tab,         setTab]         = useState<Tab>('pending')
   const [busyUid,     setBusyUid]     = useState<string | null>(null)
@@ -401,7 +402,7 @@ export default function AdminPanel() {
                           {/* Dropdown menu */}
                           {openProjectDropdown === user.uid && isEditing && !isMe && projects.length > 0 && (
                             <div className="absolute z-50 mt-1 w-full min-w-[240px] bg-white border border-slate-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                              {projects.map((proj) => {
+                              {activeProjects.map((proj) => {
                                 const checked = displayProjects.includes(proj.id)
                                 return (
                                   <label

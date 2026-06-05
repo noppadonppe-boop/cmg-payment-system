@@ -477,7 +477,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
           <FormField label="Project" required error={errors.projectId} className="sm:col-span-2">
             <Select value={form.projectId} onChange={e => set('projectId', e.target.value)} error={errors.projectId} disabled>
               <option value="">— Select project —</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {projects.map(p => <option key={p.id} value={p.id}>{p.jobNo ? `${p.jobNo} - ${p.name}` : p.name}</option>)}
             </Select>
           </FormField>
 

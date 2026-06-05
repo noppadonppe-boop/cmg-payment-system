@@ -95,6 +95,9 @@ export default function ProjectDetailPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-slate-800">{project.name}</h1>
+              {project.isMaster && (
+                <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 whitespace-nowrap">Master Data</span>
+              )}
               <Badge variant="emerald">{project.status}</Badge>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">{project.contractNo} · {project.clientName}</p>

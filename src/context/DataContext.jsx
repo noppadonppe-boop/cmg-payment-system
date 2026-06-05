@@ -1,13 +1,15 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useMemo } from 'react'
 import {
   collection, doc, onSnapshot, setDoc, updateDoc,
   deleteDoc, writeBatch,
 } from 'firebase/firestore'
-import { db } from '../firebase'
+import { db, masterDb } from '../firebase'
 
 const ROOT = 'CMG-payment-system/root'
 const col = (name) => collection(db, `${ROOT}/${name}`)
 const docRef = (name, id) => doc(db, `${ROOT}/${name}/${id}`)
+
+const masterProjectsCol = collection(masterDb, 'artifacts/cmg-budget-control-default/public/data/projects')
 
 /* ─── kept only as fallback for first-run seed detection ─── */
 const INITIAL_PROJECTS = [
@@ -278,17 +280,36 @@ const INITIAL_COAS = [
 const DataContext = createContext(null)
 
 export function DataProvider({ children }) {
-  const [projects,     setProjects]     = useState([])
+  const [localProjects, setLocalProjects] = useState([])
+  const [masterProjects, setMasterProjects] = useState([])
   const [bondStatuses, setBondStatuses] = useState([])
   const [payments,     setPayments]     = useState([])
   const [cors,         setCors]         = useState([])
   const [coas,         setCoas]         = useState([])
   const [loading,      setLoading]      = useState(true)
 
+  const projects = useMemo(() => {
+    const localMap = new Map(localProjects.map(p => [p.id, p]))
+    const mergedMaster = masterProjects.map(mp => {
+      const { status: _masterStatus, ...restMp } = mp
+      const lp = localMap.get(mp.id) || {}
+      localMap.delete(mp.id)
+      return {
+        status: _masterStatus || 'Active',
+        ...restMp,
+        ...lp,
+        id: mp.id,
+        isMaster: true,
+        masterKeys: Object.keys(restMp).filter(k => k !== 'id' && restMp[k] !== undefined && restMp[k] !== null && restMp[k] !== '')
+      }
+    })
+    return [...mergedMaster, ...Array.from(localMap.values())]
+  }, [localProjects, masterProjects])
+
   // ── Real-time listeners ──────────────────────────────────────────────────
   useEffect(() => {
     let loadCount = 0
-    const total = 5
+    const total = 6
     const done = () => { loadCount++; if (loadCount >= total) setLoading(false) }
 
     const snapshot = (colName, setter) =>
@@ -314,14 +335,21 @@ export function DataProvider({ children }) {
         done()
       }, err => { console.error(`Firestore ${colName}:`, err); done() })
 
-    const unsubProjects     = snapshot('projects',     setProjects)
+    const unsubProjects     = snapshot('projects',     setLocalProjects)
     const unsubBonds        = snapshot('bondStatuses', setBondStatuses)
     const unsubPayments     = snapshot('payments',     setPayments)
     const unsubCORs         = snapshot('cors',         setCors)
     const unsubCOAs         = snapshot('coas',         setCoas)
 
+    const unsubMasterProjects = onSnapshot(masterProjectsCol, snap => {
+      const data = snap.docs.map(d => ({ ...d.data(), id: d.id, isMaster: true }))
+      console.log(`Firestore masterProjects updated:`, data.length, 'items')
+      setMasterProjects(data)
+      done()
+    }, err => { console.error(`Firestore masterProjects:`, err); done() })
+
     return () => {
-      unsubProjects(); unsubBonds(); unsubPayments(); unsubCORs(); unsubCOAs()
+      unsubProjects(); unsubBonds(); unsubPayments(); unsubCORs(); unsubCOAs(); unsubMasterProjects()
     }
   }, [])
 
@@ -343,7 +371,7 @@ export function DataProvider({ children }) {
   }
 
   const updateProject = async (id, updates) => {
-    await updateDoc(docRef('projects', id), updates)
+    await setDoc(docRef('projects', id), updates, { merge: true })
   }
 
   const deleteProject = async (id) => {
@@ -357,7 +385,18 @@ export function DataProvider({ children }) {
 
   const updateBondStatus = async (projectId, updates) => {
     const bs = bondStatuses.find(b => b.projectId === projectId)
-    if (bs) await updateDoc(docRef('bondStatuses', bs.id), updates)
+    if (bs) {
+      await updateDoc(docRef('bondStatuses', bs.id), updates)
+    } else {
+      const bsId = `bs${Date.now()}`
+      await setDoc(docRef('bondStatuses', bsId), {
+        id: bsId, projectId: projectId,
+        advanceBond:     { status: 'Not finish', submitDate: '', note: '' },
+        performanceBond: { status: 'Not finish', submitDate: '', note: '' },
+        warrantyBond:    { status: 'Not finish', submitDate: '', note: '' },
+        ...updates
+      })
+    }
   }
 
   // ── Payments ──────────────────────────────────────────────────────────────

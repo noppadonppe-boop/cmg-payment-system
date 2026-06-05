@@ -159,8 +159,10 @@ export default function ChangeOrdersPage() {
               className="pl-3 pr-8 py-2 text-sm rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 appearance-none cursor-pointer"
             >
               <option value="all">All Projects</option>
-              {visibleProjects.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+              {visibleProjects
+                .filter(p => p.status?.toUpperCase() === 'ACTIVE')
+                .map(p => (
+                <option key={p.id} value={p.id}>{p.jobNo ? `${p.jobNo} - ${p.name}` : p.name}</option>
               ))}
             </select>
             <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -254,13 +256,13 @@ export default function ChangeOrdersPage() {
       {/* Modals */}
       {createCOROpen && (
         <CORCreateModal
-          projects={visibleProjects}
+          projects={visibleProjects.filter(p => p.status?.toUpperCase() === 'ACTIVE')}
           onClose={() => setCreateCOROpen(false)}
         />
       )}
       {editCOR && (
         <CORCreateModal
-          projects={visibleProjects}
+          projects={visibleProjects.filter(p => p.status?.toUpperCase() === 'ACTIVE' || p.id === editCOR.projectId)}
           cor={editCOR}
           onClose={() => setEditCOR(null)}
         />

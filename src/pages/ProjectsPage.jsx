@@ -39,6 +39,50 @@ export default function ProjectsPage() {
      p.location?.toLowerCase().includes(search.toLowerCase()))
   )
 
+  const activeProjects = visible.filter(p => p.status === 'Active')
+  const otherProjects = visible.filter(p => p.status !== 'Active')
+
+  const renderTable = (projectList, title) => {
+    if (projectList.length === 0) return null
+    return (
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm mb-4 last:mb-0">
+        {title && (
+          <div className="px-3 py-1.5 border-b border-slate-200 bg-slate-50/80">
+            <h3 className="font-semibold text-slate-700 text-sm">{title}</h3>
+          </div>
+        )}
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left whitespace-nowrap">
+            <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+              <tr>
+                <th className="px-2 py-1.5 font-semibold">Project No</th>
+                <th className="px-2 py-1.5 font-semibold">Project Name</th>
+                <th className="px-2 py-1.5 font-semibold">Client</th>
+                <th className="px-2 py-1.5 font-semibold">Location</th>
+                <th className="px-2 py-1.5 font-semibold text-right">Value</th>
+                <th className="px-2 py-1.5 font-semibold text-center">Status</th>
+                <th className="px-2 py-1.5 font-semibold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {projectList.map(project => (
+                <ProjectListItem
+                  key={project.id}
+                  project={project}
+                  canEdit={can('canManageProjects')}
+                  canDelete={isSuperAdmin && !project.isMaster}
+                  onView={() => navigate(`/projects/${project.id}`)}
+                  onEdit={() => navigate(`/projects/${project.id}/edit`)}
+                  onDelete={() => handleDeleteProject(project.id, project.name)}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Toolbar */}
@@ -90,78 +134,53 @@ export default function ProjectsPage() {
           )}
         </Card>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-          {visible.map(project => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              canEdit={can('canManageProjects')}
-              canDelete={isSuperAdmin}
-              onView={() => navigate(`/projects/${project.id}`)}
-              onEdit={() => navigate(`/projects/${project.id}/edit`)}
-              onDelete={() => handleDeleteProject(project.id, project.name)}
-            />
-          ))}
+        <div className="space-y-0">
+          {renderTable(activeProjects, 'Active Projects')}
+          {renderTable(otherProjects, 'Other Projects')}
         </div>
       )}
     </div>
   )
 }
 
-function ProjectCard({ project, canEdit, canDelete, onView, onEdit, onDelete }) {
+function ProjectListItem({ project, canEdit, canDelete, onView, onEdit, onDelete }) {
   return (
-    <Card padding={false} className="overflow-hidden hover:shadow-md transition-shadow duration-200">
-      {/* Color bar */}
-      <div className="h-1.5 bg-gradient-to-r from-blue-500 to-blue-700" />
-      <div className="p-5">
-        <div className="flex items-start justify-between gap-2 mb-3">
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-slate-800 truncate text-sm leading-snug">{project.name}</h3>
-            <p className="text-xs text-slate-400 mt-0.5">{project.contractNo}</p>
-          </div>
-          <Badge variant={STATUS_VARIANT[project.status] ?? 'slate'}>{project.status}</Badge>
-        </div>
-
-        <div className="space-y-1.5 mb-4">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <User size={12} className="text-slate-400 shrink-0" />
-            <span className="truncate">{project.clientName}</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <MapPin size={12} className="text-slate-400 shrink-0" />
-            <span className="truncate">{project.location}</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <Calendar size={12} className="text-slate-400 shrink-0" />
-            <span>{formatDate(project.startDate)} – {formatDate(project.finishDate)}</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <TrendingUp size={12} className="text-slate-400 shrink-0" />
-            <span className="font-medium text-slate-700">{formatCurrency(project.contractValue)}</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
-          <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{project.contractType}</span>
-          {project.retentionRequired && (
-            <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Ret. {project.retentionPercent}%</span>
+    <tr className="hover:bg-slate-50 transition-colors group">
+      <td className="px-2 py-1 font-medium text-slate-700">{project.jobNo || '—'}</td>
+      <td className="px-2 py-1">
+        <div className="flex items-center gap-1.5">
+          <span className="font-semibold text-slate-800">{project.name}</span>
+          {project.isMaster && (
+            <span className="text-[9px] font-medium text-blue-600 bg-blue-50 px-1 py-0.5 rounded border border-blue-100 leading-none">Master</span>
           )}
-          <div className="flex-1" />
-          <button onClick={onView} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors">
-            <Eye size={13} /> View
+        </div>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className="text-[9px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full leading-none">{project.contractType || '—'}</span>
+        </div>
+      </td>
+      <td className="px-2 py-1 text-slate-600">{project.clientName || '—'}</td>
+      <td className="px-2 py-1 text-slate-600 truncate max-w-[150px]">{project.location || '—'}</td>
+      <td className="px-2 py-1 font-medium text-slate-700 text-right">{formatCurrency(project.contractValue)}</td>
+      <td className="px-2 py-1 text-center">
+        <Badge variant={STATUS_VARIANT[project.status] ?? 'slate'}>{project.status}</Badge>
+      </td>
+      <td className="px-2 py-1 text-right">
+        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={onView} className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="View">
+            <Eye size={14} />
           </button>
           {canEdit && (
-            <button onClick={onEdit} className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 font-medium transition-colors ml-2">
-              <Edit size={13} /> Edit
+            <button onClick={onEdit} className="p-1 text-slate-500 hover:bg-slate-100 rounded transition-colors" title="Edit">
+              <Edit size={14} />
             </button>
           )}
           {canDelete && (
-            <button onClick={onDelete} className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-700 font-medium transition-colors ml-2">
-              <Trash2 size={13} /> Delete
+            <button onClick={onDelete} className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors" title="Delete">
+              <Trash2 size={14} />
             </button>
           )}
         </div>
-      </div>
-    </Card>
+      </td>
+    </tr>
   )
 }
