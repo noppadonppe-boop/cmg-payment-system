@@ -248,10 +248,8 @@ export default function PaymentCreateModal({ projects, onClose }) {
       if (claimCOA) base += calculateAllCOATotal()
       return base
     } else {
-      // หักหลัง - คำนวณจาก Total Claim Value (หลังหัก Advance) + VAT
-      const tcv = grandTotal - calculateAdvanceDeduction()
-      const vatAmount = Math.round(tcv * 0.07 * 100) / 100
-      return tcv + vatAmount
+      // หักหลัง - คำนวณจาก Total Claim Value (หลังหัก Advance) ไม่รวม VAT
+      return grandTotal - calculateAdvanceDeduction()
     }
   }
 
