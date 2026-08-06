@@ -7,7 +7,6 @@ import { AttachmentField, AttachmentLink } from '../ui/AttachmentField'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
 import { Modal } from './PaymentCreateModal'
-import { clsx } from 'clsx'
 import THBText from 'thai-baht-text'
 
 function fmtCurrency(val) {
@@ -134,8 +133,14 @@ export default function InvoiceModal({ payment, onClose }) {
   // คำนวณมูลค่ารวมของรายการ (Main Contract + COA + Other Claim)
   let itemSum = 0
   if (payment.claimMainContract || payment.claimCOA) {
-    itemSum = (payment.mainContractItems?.reduce((acc, it) => acc + (it.value || 0), 0) || 0) +
-              (payment.coaItems?.reduce((acc, coa) => acc + (coa.items?.reduce((s, it) => s + (it.value || 0), 0) || 0), 0) || 0)
+    const mainItemSum = payment.claimMainContract
+      ? payment.mainContractItems?.reduce((acc, it) => acc + (it.value || 0), 0) || 0
+      : 0
+    const coaItemSum = payment.claimCOA
+      ? payment.coaItems?.reduce((acc, coa) => acc + (coa.items?.reduce((s, it) => s + (it.value || 0), 0) || 0), 0) || 0
+      : 0
+
+    itemSum = mainItemSum + coaItemSum
   } else {
     itemSum = payment.value
   }
