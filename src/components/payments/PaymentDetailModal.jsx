@@ -11,6 +11,8 @@ import { AttachmentField, AttachmentLink } from '../ui/AttachmentField'
 import { Modal } from './PaymentCreateModal'
 import ReceiptPreviewModal from './ReceiptPreviewModal'
 import { clsx } from 'clsx'
+import { getPaymentFinancials } from '../../lib/paymentCalculations'
+import { normalizePaymentStatus } from '../../lib/paymentStatus'
 
 function fmtCurrency(val) {
   if (!val && val !== 0) return '—'
@@ -48,12 +50,8 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
   const isAccCMG = can('canUpdateBonds')
 
   // Map old statuses
-  let mappedStatus = payment.status
-  if (mappedStatus === 'In Progress') mappedStatus = 'Pending PM'
-  if (mappedStatus === 'Rejected') mappedStatus = 'PM Rejected'
-  if (mappedStatus === 'Submitted') mappedStatus = 'Invoice Submitted'
-  if (mappedStatus === 'Received') mappedStatus = 'Completed'
-  if (mappedStatus === 'Invoice PM Approved') mappedStatus = 'Invoice Submitted'
+  const mappedStatus = normalizePaymentStatus(payment)
+  const financials = getPaymentFinancials(payment)
 
   const currentStep =
     mappedStatus === 'Completed' ? 4 :
@@ -228,17 +226,17 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
               <span className="text-emerald-700">Balance</span>
             </div>
             <div className="grid grid-cols-6 px-4 py-3 text-center items-center">
-              <span className="text-sm font-semibold text-slate-800">{fmtCurrency(payment.value)}</span>
-              <span className="text-sm font-medium text-slate-600">+{fmtCurrency(payment.value * 0.07)}</span>
+              <span className="text-sm font-semibold text-slate-800">{fmtCurrency(financials.value)}</span>
+              <span className="text-sm font-medium text-slate-600">+{fmtCurrency(financials.vatAmount)}</span>
               <span className="text-sm font-medium text-rose-500">−{fmtCurrency(payment.advanceDeduction)}</span>
               <span className="text-sm font-medium text-rose-500">−{fmtCurrency(payment.retentionReduce)}</span>
-              <span className="text-sm font-medium text-rose-500">-{fmtCurrency(payment.withTaxValue || 0)}</span>
-              <span className="text-base font-bold text-emerald-700">{fmtCurrency(payment.balanceValue)}</span>
+              <span className="text-sm font-medium text-rose-500">-{fmtCurrency(financials.withTaxValue)}</span>
+              <span className="text-base font-bold text-emerald-700">{fmtCurrency(financials.balanceValue)}</span>
             </div>
           </div>
 
           {/* Rejection notice */}
-          {payment.status === 'Rejected' && (
+          {mappedStatus === 'PM Rejected' && (
             <div className="mt-3 space-y-3">
               <div className="flex items-start gap-2.5 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2.5">
                 <XCircle size={15} className="text-rose-500 shrink-0 mt-0.5" />
@@ -264,7 +262,7 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
             </div>
           )}
 
-          {isPM && payment.status === 'In Progress' && (
+          {isPM && mappedStatus === 'Pending PM' && (
             <div className="mt-3">
               <Button variant="primary" size="sm" onClick={() => onAction?.('approve')}>
                 Review & Approve / Reject
@@ -312,7 +310,7 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
             </div>
           ) : (
             <p className="text-sm text-slate-400">
-              {payment.status === 'In Progress' || payment.status === 'Rejected'
+              {mappedStatus === 'Pending PM' || mappedStatus === 'PM Rejected'
                 ? 'Awaiting PM approval before invoice can be issued.'
                 : 'Invoice not yet issued.'}
             </p>
@@ -340,7 +338,7 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
             </div>
           )}
 
-          {isQsEng && payment.status === 'Submitted' && !payment.revisionRequest && (
+          {isQsEng && mappedStatus === 'PM Approved' && !payment.revisionRequest && (
             <div className="mt-3 flex gap-2">
               {!payment.invoiceNo && (
                 <Button variant="primary" size="sm" icon={Send} onClick={() => onAction?.('invoice')}>
@@ -353,7 +351,7 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
             </div>
           )}
           
-          {isQsEng && payment.status === 'Submitted' && payment.revisionRequest && payment.revisionRequest.status === 'Pending' && (
+          {isQsEng && mappedStatus === 'PM Approved' && payment.revisionRequest && payment.revisionRequest.status === 'Pending' && (
             <div className="mt-3">
               <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
                 <AlertCircle size={15} className="text-blue-500 shrink-0 mt-0.5" />
@@ -397,7 +395,7 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
             </div>
           ) : (
             <p className="text-sm text-slate-400">
-              {isAccCMG && (payment.status === 'Submitted' || payment.status === 'Income Confirm Pending') && payment.invoiceNo
+              {isAccCMG && (mappedStatus === 'Invoice Submitted' || mappedStatus === 'Income Confirm Pending') && payment.invoiceNo
                 ? mappedStatus === 'Income Confirm Pending'
                   ? 'Awaiting receipt generation to complete payment.'
                   : 'Ready to accept payment receipt.'
@@ -406,7 +404,7 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
           )}
 
           {/* Stage 3 — Accept button (Invoice Submitted) */}
-          {isAccCMG && payment.status === 'Submitted' && payment.invoiceNo && !payment.receivedDate && (
+          {isAccCMG && mappedStatus === 'Invoice Submitted' && payment.invoiceNo && !payment.receivedDate && (
             <div className="mt-3">
               <Button variant="primary" size="sm" icon={CheckCircle2} onClick={() => onAction?.('received')}>
                 Accept
@@ -514,12 +512,7 @@ export default function PaymentDetailModal({ payment, actions, onClose, onAction
 
 /* ─── Visual Workflow Stepper ─────────────────────────────────────────────── */
 function WorkflowStepper({ payment }) {
-  let mappedStatus = payment.status
-  if (mappedStatus === 'In Progress') mappedStatus = 'Pending PM'
-  if (mappedStatus === 'Rejected') mappedStatus = 'PM Rejected'
-  if (mappedStatus === 'Submitted') mappedStatus = 'Invoice Submitted'
-  if (mappedStatus === 'Received') mappedStatus = 'Completed'
-  if (mappedStatus === 'Invoice PM Approved') mappedStatus = 'Invoice Submitted'
+  const mappedStatus = normalizePaymentStatus(payment)
   // Income Confirm Pending stays as-is
   
   // Define main steps with sub-steps

@@ -6,6 +6,7 @@ import { FormField, Textarea } from '../ui/FormField'
 import Button from '../ui/Button'
 import { Modal } from './PaymentCreateModal'
 import { clsx } from 'clsx'
+import { normalizePaymentStatus } from '../../lib/paymentStatus'
 
 export default function RequestRevisionModal({ payment, onClose }) {
   const { updatePayment } = useData()
@@ -18,9 +19,7 @@ export default function RequestRevisionModal({ payment, onClose }) {
   const isQsENG = can('canCreateClaims')
 
   // Map old status
-  let status = payment.status
-  if (status === 'Submitted') status = 'Invoice Submitted'
-  if (status === 'Invoice PM Approved') status = 'Invoice Submitted'
+  const status = normalizePaymentStatus(payment)
 
   // Determine if invoice has been created
   const hasInvoice = !!payment.invoiceNo || status.startsWith('Invoice') || status === 'Client Sign Pending' || status === 'Invoice Submitted'

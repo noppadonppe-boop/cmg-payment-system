@@ -8,7 +8,8 @@ import Button from '../ui/Button'
 import Badge from '../ui/Badge'
 import { Modal } from './PaymentCreateModal'
 import ReceiptPreviewModal from './ReceiptPreviewModal'
-import { clsx } from 'clsx'
+import { getPaymentFinancials } from '../../lib/paymentCalculations'
+import { normalizePaymentStatus } from '../../lib/paymentStatus'
 
 function fmtCurrency(val) {
   if (!val && val !== 0) return '—'
@@ -22,19 +23,20 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function parseCurrency(value) {
+  return Number(String(value || '').replace(/,/g, '')) || 0
+}
+
 export default function ReceivedModal({ payment, onClose, onRequestRevision }) {
-  const { updatePayment, projects, getProjectCOAs } = useData()
+  const { updatePayment, projects } = useData()
   const { currentUser } = useAuth()
 
   const project = projects.find(p => p.id === payment.projectId)
-  const projectCOAs = payment.projectId ? getProjectCOAs(payment.projectId) : []
 
   // Map old status
-  let status = payment.status
-  if (status === 'Submitted') status = 'Invoice Submitted'
-  if (status === 'Invoice PM Approved') status = 'Invoice Submitted'
+  const status = normalizePaymentStatus(payment)
+  const financials = getPaymentFinancials(payment)
 
-  const isAccepting = status === 'Invoice Submitted'
   const isConfirmingReceive = status === 'Income Confirm Pending'
   const isStage31 = isConfirmingReceive
 
@@ -68,6 +70,29 @@ export default function ReceivedModal({ payment, onClose, onRequestRevision }) {
 
   const validate = () => {
     const errs = {}
+    if (!form.receiptNo.trim()) errs.receiptNo = 'Receipt number is required'
+    if (!form.paymentType) errs.paymentType = 'Select a payment method'
+    if (!form.collector.trim()) errs.collector = 'Collector is required'
+    if (!form.collectionDate) errs.collectionDate = 'Collection date is required'
+
+    const expectedAmount = Number(financials.balanceValue || 0)
+    if (form.paymentType === 'cash') {
+      const amount = parseCurrency(form.cashAmount)
+      if (amount <= 0) errs.cashAmount = 'Cash amount is required'
+      else if (Math.abs(amount - expectedAmount) > 0.01) errs.cashAmount = `Amount must equal ${fmtCurrency(expectedAmount)}`
+    }
+    if (form.paymentType === 'transfer') {
+      const amount = parseCurrency(form.transferAmount)
+      if (amount <= 0) errs.transferAmount = 'Transfer amount is required'
+      else if (Math.abs(amount - expectedAmount) > 0.01) errs.transferAmount = `Amount must equal ${fmtCurrency(expectedAmount)}`
+      if (!form.transferBank.trim()) errs.transferBank = 'Bank is required'
+      if (!form.transferDate) errs.transferDate = 'Transfer date is required'
+    }
+    if (form.paymentType === 'cheque') {
+      if (!form.chequeNo.trim()) errs.chequeNo = 'Cheque number is required'
+      if (!form.chequeBank.trim()) errs.chequeBank = 'Bank is required'
+      if (!form.chequeDate) errs.chequeDate = 'Cheque date is required'
+    }
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -79,10 +104,6 @@ export default function ReceivedModal({ payment, onClose, onRequestRevision }) {
       status: 'Income Confirm Pending',
       acceptedBy: currentUser.id,
       acceptedAt: new Date().toISOString().split('T')[0],
-      incomeConfirmedDate: new Date().toISOString().split('T')[0],
-      incomeConfirmedAmount: payment.balanceValue || 0,
-      incomeConfirmedBy: currentUser.id,
-      incomeConfirmedAt: new Date().toISOString().split('T')[0],
     })
     setSaving(false)
     onClose()
@@ -98,16 +119,19 @@ export default function ReceivedModal({ payment, onClose, onRequestRevision }) {
       receivedAt: new Date().toISOString().split('T')[0],
       receivedDate: form.collectionDate, // ใช้วันที่รับเงินจาก Stage 3.1
       receivedNote: form.receivedNote,
-      incomeConfirmedAmount: payment.incomeConfirmedAmount || payment.balanceValue || 0,
+      incomeConfirmedDate: form.collectionDate,
+      incomeConfirmedAmount: financials.balanceValue,
+      incomeConfirmedBy: currentUser.id,
+      incomeConfirmedAt: new Date().toISOString().split('T')[0],
       // Payment collection info
       receiptNo: form.receiptNo,
       paymentType: form.paymentType,
-      cashAmount: form.cashAmount,
+      cashAmount: form.paymentType === 'cash' ? parseCurrency(form.cashAmount) : null,
       chequeNo: form.chequeNo,
       chequeBank: form.chequeBank,
       chequeBranch: form.chequeBranch,
       chequeDate: form.chequeDate,
-      transferAmount: form.transferAmount,
+      transferAmount: form.paymentType === 'transfer' ? parseCurrency(form.transferAmount) : null,
       transferBank: form.transferBank,
       transferBranch: form.transferBranch,
       transferDate: form.transferDate,
@@ -137,13 +161,18 @@ export default function ReceivedModal({ payment, onClose, onRequestRevision }) {
       invoiceRejectionNote: rejectNote,
       invoiceRejectedBy: currentUser.id,
       invoiceRejectedAt: new Date().toISOString().split('T')[0],
+      acceptedBy: null,
+      acceptedAt: null,
+      incomeConfirmedDate: null,
+      incomeConfirmedAmount: null,
+      incomeConfirmedBy: null,
+      incomeConfirmedAt: null,
     })
     setSaving(false)
     onClose()
   }
 
-  const mainTotal = payment.mainContractItems?.reduce((sum, item) => sum + (item.value || 0), 0) || 0
-  const coaTotal = payment.coaItems?.reduce((sum, coa) => sum + (coa.items?.reduce((s, item) => s + (item.value || 0), 0) || 0), 0) || 0
+  const mainTotal = financials.mainContractValue
 
   return (
     <>
@@ -254,12 +283,12 @@ export default function ReceivedModal({ payment, onClose, onRequestRevision }) {
               <span className="text-blue-900">Balance</span>
             </div>
             <div className="grid grid-cols-6 px-2 py-1.5 text-center items-center">
-              <span className="text-[10px] font-semibold text-blue-800">{fmtCurrency(payment.value)}</span>
-              <span className="text-[10px] font-medium text-blue-600">+{fmtCurrency(payment.value * 0.07)}</span>
+              <span className="text-[10px] font-semibold text-blue-800">{fmtCurrency(financials.value)}</span>
+              <span className="text-[10px] font-medium text-blue-600">+{fmtCurrency(financials.vatAmount)}</span>
               <span className="text-[10px] font-medium text-rose-600">−{fmtCurrency(payment.advanceDeduction)}</span>
               <span className="text-[10px] font-medium text-rose-600">−{fmtCurrency(payment.retentionReduce)}</span>
-              <span className="text-[10px] font-medium text-rose-600">-{fmtCurrency(payment.withTaxValue || 0)}</span>
-              <span className="text-xs font-bold text-blue-900">{fmtCurrency(payment.balanceValue)}</span>
+              <span className="text-[10px] font-medium text-rose-600">-{fmtCurrency(financials.withTaxValue)}</span>
+              <span className="text-xs font-bold text-blue-900">{fmtCurrency(financials.balanceValue)}</span>
             </div>
           </div>
 
@@ -534,6 +563,12 @@ export default function ReceivedModal({ payment, onClose, onRequestRevision }) {
                   </div>
                 </div>
               </div>
+
+              {Object.keys(errors).length > 0 && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 space-y-1">
+                  {Object.values(errors).map((message, index) => <p key={index}>{message}</p>)}
+                </div>
+              )}
 
               <FormField label="Note (optional)">
                 <Textarea

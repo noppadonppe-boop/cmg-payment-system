@@ -17,6 +17,7 @@ import ConvertToCOAModal from '../components/changeorders/ConvertToCOAModal'
 import COAPaymentModal from '../components/changeorders/COAPaymentModal'
 import COAStampUploadModal from '../components/changeorders/COAStampUploadModal'
 import { getPaymentCOAAmounts, getPaymentsForCOA } from '../lib/coaPayments'
+import { normalizePaymentStatus } from '../lib/paymentStatus'
 
 export const COR_STATUS_CONFIG = {
   'Prepare doc': { badge: 'slate',   icon: Clock,        label: 'Prepare Doc'  },
@@ -38,7 +39,7 @@ function getPaymentReceivedValue(payment, coa) {
   const amounts = getPaymentCOAAmounts(payment, coa)
   if (!amounts.claimValue) return 0
 
-  if (payment.status === 'Received' || payment.status === 'Completed') {
+  if (normalizePaymentStatus(payment) === 'Completed') {
     return payment.receivedValue ?? payment.incomeConfirmedAmount ?? amounts.balanceValue ?? payment.balanceValue ?? 0
   }
 

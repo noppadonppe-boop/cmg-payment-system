@@ -19,27 +19,9 @@ import ApproveModal from '../components/payments/ApproveModal'
 import RequestRevisionModal from '../components/payments/RequestRevisionModal'
 import ApproveRevisionModal from '../components/payments/ApproveRevisionModal'
 import DraftEditModal from '../components/payments/DraftEditModal'
+import { PAYMENT_STATUS, normalizePaymentStatus } from '../lib/paymentStatus'
 
-export const PAYMENT_STATUS = {
-  // Stage 1: ISSUE PAYMENT
-  'Draft':                    { step: 1, label: 'Draft',                  badge: 'slate',   icon: FileText,      description: 'Draft - pending submission' },
-  'Pending PM':               { step: 1, label: 'Pending PM',             badge: 'amber',   icon: Clock,         description: 'Awaiting PM approval' },
-  'PM Rejected':              { step: 1, label: 'PM Rejected',            badge: 'rose',    icon: AlertCircle,   description: 'PM Rejected — needs revision' },
-  
-  // Stage 2: ISSUE INVOICE
-  'PM Approved':              { step: 2, label: 'PM Approved',            badge: 'blue',    icon: CheckCircle2,  description: 'PM Approved - ready for invoice' },
-  'Invoice Draft':            { step: 2, label: 'Invoice Draft',          badge: 'slate',   icon: FileText,      description: 'Invoice draft - pending submission' },
-  'Invoice Pending PM':       { step: 2, label: 'Invoice Pending PM',     badge: 'amber',   icon: Clock,         description: 'Invoice awaiting PM review' },
-  'Invoice PM Rejected':      { step: 2, label: 'Invoice PM Rejected',    badge: 'rose',    icon: AlertCircle,   description: 'Invoice rejected by PM' },
-  'Client Sign Pending':      { step: 2, label: 'Client Sign Pending',    badge: 'blue',    icon: Send,          description: 'Waiting for client signature' },
-  
-  // Stage 3: ACC RECEIVE
-  'Invoice Submitted':        { step: 3, label: 'Invoice Submitted',      badge: 'blue',    icon: Send,          description: 'Invoice submitted - awaiting AccCMG' },
-  'Income Confirm Pending':   { step: 3, label: 'Income Confirm Pending', badge: 'amber',   icon: Clock,         description: 'Awaiting income confirmation' },
-  
-  // Stage 4: COMPLETE
-  'Completed':                { step: 4, label: 'Completed',              badge: 'emerald', icon: Banknote,      description: 'Payment completed' },
-}
+export { PAYMENT_STATUS }
 
 function fmtCurrency(val) {
   if (!val && val !== 0) return '—'
@@ -88,11 +70,7 @@ export default function PaymentsPage() {
     if (selectedProjectId !== 'all' && pay.projectId !== selectedProjectId) return false
     
     // Map old status to new for filtering
-    let mappedStatus = pay.status
-    if (mappedStatus === 'In Progress') mappedStatus = 'Pending PM'
-    if (mappedStatus === 'Rejected') mappedStatus = 'PM Rejected'
-    if (mappedStatus === 'Submitted') mappedStatus = 'Invoice Submitted'
-    if (mappedStatus === 'Received') mappedStatus = 'Completed'
+    const mappedStatus = normalizePaymentStatus(pay)
     
     // ถ้าเลือกสถานะเฉพาะ ให้กรองตามนั้น
     if (statusFilter !== 'all' && mappedStatus !== statusFilter) return false
@@ -103,39 +81,32 @@ export default function PaymentsPage() {
   // Stats - with backward compatibility mapping
   const allVisible = payments.filter(p => hasProjectAccess(p.projectId) && (p.type === 'main' || p.type === 'coa'))
   
-  const mapStatus = (status) => {
-    if (status === 'In Progress') return 'Pending PM'
-    if (status === 'Rejected') return 'PM Rejected'
-    if (status === 'Submitted') return 'Invoice Submitted'
-    if (status === 'Received') return 'Completed'
-    if (status === 'Invoice PM Approved') return 'Invoice Submitted' // Old status mapping
-    return status
-  }
+  const mapStatus = normalizePaymentStatus
   
   const stats = {
     total:         allVisible.length,
     draft:         allVisible.filter(p => {
-      const s = mapStatus(p.status)
+      const s = mapStatus(p)
       return s === 'Draft' || s === 'Invoice Draft'
     }).length,
     pendingPM:     allVisible.filter(p => {
-      const s = mapStatus(p.status)
+      const s = mapStatus(p)
       return s === 'Pending PM' || s === 'Invoice Pending PM'
     }).length,
     pmApproved:    allVisible.filter(p => {
-      const s = mapStatus(p.status)
+      const s = mapStatus(p)
       return s === 'PM Approved' || s === 'Client Sign Pending'
     }).length,
     invoiceSubmit: allVisible.filter(p => {
-      const s = mapStatus(p.status)
+      const s = mapStatus(p)
       return s === 'Invoice Submitted' || s === 'Income Confirm Pending'
     }).length,
-    completed:     allVisible.filter(p => mapStatus(p.status) === 'Completed').length,
+    completed:     allVisible.filter(p => mapStatus(p) === 'Completed').length,
     rejected:      allVisible.filter(p => {
-      const s = mapStatus(p.status)
+      const s = mapStatus(p)
       return s === 'PM Rejected' || s === 'Invoice PM Rejected'
     }).length,
-    totalCompleted: allVisible.filter(p => mapStatus(p.status) === 'Completed').reduce((s, p) => s + (p.balanceValue || 0), 0),
+    totalCompleted: allVisible.filter(p => mapStatus(p) === 'Completed').reduce((s, p) => s + (p.balanceValue || 0), 0),
   }
 
   // Check user roles using can() for better multi-role support
@@ -159,12 +130,7 @@ export default function PaymentsPage() {
     }
     
     // Map old statuses to new ones for backward compatibility
-    let status = pay.status
-    if (status === 'In Progress') status = 'Pending PM'
-    if (status === 'Rejected') status = 'PM Rejected'
-    if (status === 'Submitted') status = 'Invoice Submitted'
-    if (status === 'Received') status = 'Completed'
-    if (status === 'Invoice PM Approved') status = 'Invoice Submitted'
+    const status = normalizePaymentStatus(pay)
     
     // Stage 1: ISSUE PAYMENT
     // 1.0: Draft - QsENG can edit and submit
@@ -313,11 +279,7 @@ export default function PaymentsPage() {
             const actions  = getActions(pay)
             
             // Map old statuses to new ones for backward compatibility
-            let mappedStatus = pay.status
-            if (pay.status === 'In Progress') mappedStatus = 'Pending PM'
-            if (pay.status === 'Rejected') mappedStatus = 'PM Rejected'
-            if (pay.status === 'Submitted') mappedStatus = 'Invoice Submitted'
-            if (pay.status === 'Received') mappedStatus = 'Completed'
+            const mappedStatus = normalizePaymentStatus(pay)
             
             const sc = PAYMENT_STATUS[mappedStatus] ?? PAYMENT_STATUS['Pending PM']
 
@@ -396,6 +358,10 @@ export default function PaymentsPage() {
         <InvoiceModal
           payment={invoicePayment}
           onClose={() => setInvoicePayment(null)}
+          onEditPayment={() => {
+            setEditPayment(invoicePayment)
+            setInvoicePayment(null)
+          }}
         />
       )}
       {receivedPayment && (
@@ -429,11 +395,7 @@ function PaymentRow({ pay, project, creator, sc, actions, canDelete, onView, onD
   const StatusIcon = sc.icon
   
   // Map old statuses to new ones for backward compatibility
-  let status = pay.status
-  if (status === 'In Progress') status = 'Pending PM'
-  if (status === 'Rejected') status = 'PM Rejected'
-  if (status === 'Submitted') status = 'Invoice Submitted'
-  if (status === 'Received') status = 'Completed'
+  const status = normalizePaymentStatus(pay)
 
   return (
     <Card padding={false} className="overflow-hidden hover:shadow-md transition-shadow" onDoubleClick={onView}>
@@ -536,12 +498,7 @@ function PaymentRow({ pay, project, creator, sc, actions, canDelete, onView, onD
 
 export function MiniStepper({ status }) {
   // Map old statuses to new ones for backward compatibility
-  let mappedStatus = status
-  if (status === 'In Progress') mappedStatus = 'Pending PM'
-  if (status === 'Rejected') mappedStatus = 'PM Rejected'
-  if (status === 'Submitted') mappedStatus = 'Invoice Submitted'
-  if (status === 'Received') mappedStatus = 'Completed'
-  if (status === 'Invoice PM Approved') mappedStatus = 'Invoice Submitted'
+  const mappedStatus = normalizePaymentStatus(status)
   
   // Define main steps with sub-steps
   const steps = [

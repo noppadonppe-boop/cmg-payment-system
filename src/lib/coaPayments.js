@@ -37,13 +37,24 @@ export function getPaymentCOAAmounts(payment, coa) {
   const itemizedClaimValue = matchingCoaItems.reduce((sum, item) => sum + sumItems(item?.items), 0)
   const isDedicatedCOAPayment =
     payment.type === 'coa' &&
-    (matchesCoaReference(payment.coaId, coa) || matchesCoaReference(payment.coaNo, coa))
+    (
+      matchesCoaReference(payment.coaId, coa) ||
+      matchesCoaReference(payment.coaNo, coa) ||
+      (matchingCoaItems.length === 1 && payment.coaItems?.length === 1)
+    )
 
   const claimValue = itemizedClaimValue || (isDedicatedCOAPayment ? (payment.value || payment.balanceValue || 0) : 0)
-  const deductionsValue = isDedicatedCOAPayment
-    ? (payment.advanceDeduction || 0) + (payment.retentionReduce || 0) + (payment.withTaxValue || 0)
-    : 0
-  const balanceValue = isDedicatedCOAPayment ? (payment.balanceValue || claimValue) : claimValue
+  const financials = getPaymentFinancials(payment)
+  const allocationBase = financials.itemsValue || claimValue
+  const allocationRatio = allocationBase > 0 ? claimValue / allocationBase : 0
+  const deductionsValue = payment.claimCOA
+    ? allocationRatio * ((payment.advanceDeduction || 0) + (payment.retentionReduce || 0) + financials.withTaxValue)
+    : isDedicatedCOAPayment
+      ? (payment.advanceDeduction || 0) + (payment.retentionReduce || 0) + financials.withTaxValue
+      : 0
+  const balanceValue = payment.claimCOA
+    ? allocationRatio * financials.balanceValue
+    : isDedicatedCOAPayment ? financials.balanceValue : claimValue
 
   return {
     claimValue,
@@ -57,3 +68,4 @@ export function getPaymentsForCOA(payments, coa) {
   return payments.filter(payment => isPaymentLinkedToCOA(payment, coa))
 }
 
+import { getPaymentFinancials } from './paymentCalculations'

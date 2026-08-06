@@ -14,6 +14,8 @@ import Card, { CardHeader } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import { clsx } from 'clsx'
 import { getPaymentCOAAmounts, getPaymentsForCOA } from '../lib/coaPayments'
+import { getPaymentFinancials, getPaymentSourceAmounts } from '../lib/paymentCalculations'
+import { normalizePaymentStatus } from '../lib/paymentStatus'
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 function fmt(val) {
@@ -106,9 +108,9 @@ export default function ReportsPage() {
 
   /* ── Global KPIs ── */
   const totalContractValue = visibleProjects.reduce((s, p) => s + (p.contractValue || 0), 0)
-  const totalMainReceived  = visiblePayments.filter(p => p.type === 'main' && p.status === 'Received').reduce((s, p) => s + (p.balanceValue || 0), 0)
+  const totalMainReceived  = visiblePayments.filter(p => normalizePaymentStatus(p) === 'Completed').reduce((s, p) => s + getPaymentSourceAmounts(p, 'main').balanceValue, 0)
   const totalCOAValue      = visibleCOAs.reduce((s, c) => s + (c.value || 0), 0)
-  const totalCOAReceived   = visiblePayments.filter(p => p.type === 'coa' && p.status === 'Received').reduce((s, p) => s + (p.balanceValue || 0), 0)
+  const totalCOAReceived   = visiblePayments.filter(p => normalizePaymentStatus(p) === 'Completed').reduce((s, p) => s + getPaymentSourceAmounts(p, 'coa').balanceValue, 0)
   const totalRetention     = visiblePayments.filter(p => p.type === 'main').reduce((s, p) => s + (p.retentionReduce || 0), 0)
 
   return (
@@ -206,25 +208,27 @@ function Report1({ projects, payments, coas, selectedProject }) {
     : projects.filter(p => p.id === selectedProject)
 
   const rows = filteredProjects.map(proj => {
-    const mainPays      = payments.filter(p => p.projectId === proj.id && p.type === 'main')
-    const coaPays       = payments.filter(p => p.projectId === proj.id && p.type === 'coa')
+    const projectPays   = payments.filter(p => p.projectId === proj.id)
+    const mainPays      = projectPays.filter(p => getPaymentSourceAmounts(p, 'main').claimValue > 0)
+    const coaPays       = projectPays.filter(p => getPaymentSourceAmounts(p, 'coa').claimValue > 0)
     const projectCOAs   = coas.filter(c => c.projectId === proj.id)
-    const receivedPays  = mainPays.filter(p => p.status === 'Received')
-    const submittedPays = mainPays.filter(p => p.status === 'Submitted')
-    const coaReceivedPays  = coaPays.filter(p => p.status === 'Received')
-    const coaSubmittedPays = coaPays.filter(p => p.status === 'Submitted')
+    const receivedPays  = mainPays.filter(p => normalizePaymentStatus(p) === 'Completed')
+    const submittedPays = mainPays.filter(p => ['Invoice Submitted', 'Income Confirm Pending'].includes(normalizePaymentStatus(p)))
+    const coaReceivedPays  = coaPays.filter(p => normalizePaymentStatus(p) === 'Completed')
+    const coaSubmittedPays = coaPays.filter(p => ['Invoice Submitted', 'Income Confirm Pending'].includes(normalizePaymentStatus(p)))
 
     const contractValue    = proj.contractValue || 0
     const coaValue         = projectCOAs.reduce((s, c) => s + (c.value || 0), 0)
-    const totalClaimed     = mainPays.reduce((s, p) => s + (p.value || 0), 0)
-    const totalReceived    = receivedPays.reduce((s, p) => s + (p.balanceValue || 0), 0)
-    const totalSubmitted   = submittedPays.reduce((s, p) => s + (p.balanceValue || 0), 0)
+    const totalClaimed     = mainPays.reduce((s, p) => s + getPaymentSourceAmounts(p, 'main').claimValue, 0)
+    const totalReceived    = receivedPays.reduce((s, p) => s + getPaymentSourceAmounts(p, 'main').balanceValue, 0)
+    const totalSubmitted   = submittedPays.reduce((s, p) => s + getPaymentSourceAmounts(p, 'main').balanceValue, 0)
     const totalRetention   = mainPays.reduce((s, p) => s + (p.retentionReduce || 0), 0)
-    const coaReceived      = coaReceivedPays.reduce((s, p) => s + (p.balanceValue || 0), 0)
-    const coaSubmitted     = coaSubmittedPays.reduce((s, p) => s + (p.balanceValue || 0), 0)
+    const coaReceived      = coaReceivedPays.reduce((s, p) => s + getPaymentSourceAmounts(p, 'coa').balanceValue, 0)
+    const coaSubmitted     = coaSubmittedPays.reduce((s, p) => s + getPaymentSourceAmounts(p, 'coa').balanceValue, 0)
     const coaRetention     = coaPays.reduce((s, p) => s + (p.retentionReduce || 0), 0)
-    const balance          = contractValue - totalReceived - totalSubmitted
-    const coaBalance       = coaValue - coaReceived - coaSubmitted
+    const balance          = contractValue - totalClaimed
+    const totalCOAClaimed  = coaPays.reduce((s, p) => s + getPaymentSourceAmounts(p, 'coa').claimValue, 0)
+    const coaBalance       = coaValue - totalCOAClaimed
     const totalIncome      = contractValue + coaValue
     const combinedReceived = totalReceived + coaReceived
     const combinedSubmitted = totalSubmitted + coaSubmitted
@@ -560,14 +564,15 @@ function Report2({ projects, coas, cors, payments, selectedProject }) {
     const cor        = cors.find(c => c.id === coa.corId)
     const coaPays    = getPaymentsForCOA(payments, coa)
     const received   = coaPays
-      .filter(p => p.status === 'Received')
+      .filter(p => normalizePaymentStatus(p) === 'Completed')
       .reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).balanceValue, 0)
     const submitted  = coaPays
-      .filter(p => p.status === 'Submitted')
+      .filter(p => ['Invoice Submitted', 'Income Confirm Pending'].includes(normalizePaymentStatus(p)))
       .reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).balanceValue, 0)
     const retention  = coaPays.reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).deductionsValue, 0)
-    const balance    = coa.value - received - submitted
-    const progress   = pct(received + submitted, coa.value)
+    const claimed    = coaPays.reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).claimValue, 0)
+    const balance    = coa.value - claimed
+    const progress   = pct(claimed, coa.value)
     return { coa, proj, cor, received, submitted, retention, balance, progress, claimsCount: coaPays.length }
   })
 
@@ -851,8 +856,8 @@ function Report3({ projects, payments, cors, coas, bondStatuses, selectedProject
     total: bondStatuses.filter(b => filteredProjects.some(p => p.id === b.projectId)).length * 3,
   }
   const paymentSummary = {
-    received:   payments.filter(p => p.type === 'main' && filteredProjects.some(pr => pr.id === p.projectId) && p.status === 'Received').length,
-    inProgress: payments.filter(p => p.type === 'main' && filteredProjects.some(pr => pr.id === p.projectId) && p.status !== 'Received').length,
+    received:   payments.filter(p => p.type === 'main' && filteredProjects.some(pr => pr.id === p.projectId) && normalizePaymentStatus(p) === 'Completed').length,
+    inProgress: payments.filter(p => p.type === 'main' && filteredProjects.some(pr => pr.id === p.projectId) && normalizePaymentStatus(p) !== 'Completed').length,
   }
   const corSummary = {
     converted: cors.filter(c => filteredProjects.some(p => p.id === c.projectId) && c.convertedToCOA).length,

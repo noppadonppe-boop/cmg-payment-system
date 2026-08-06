@@ -2,6 +2,7 @@ import { Printer } from 'lucide-react'
 import { Modal } from './PaymentCreateModal'
 import Button from '../ui/Button'
 import { clsx } from 'clsx'
+import { getPaymentFinancials } from '../../lib/paymentCalculations'
 
 function fmtCurrency(val) {
   if (!val && val !== 0) return '—'
@@ -87,9 +88,10 @@ export default function ReceiptPreviewModal({ payment, project, collectionData =
   const clientInfo = project?.clientInfo || {}
   const cd = collectionData
 
-  const claimValue = payment.value || 0
-  const vatAmount = claimValue * 0.07
-  const totalWithVat = claimValue + vatAmount
+  const financials = getPaymentFinancials(payment)
+  const claimValue = financials.value
+  const vatAmount = financials.vatAmount
+  const totalWithVat = financials.grossClaimValue
 
   const contractNos = []
   if (payment.claimMainContract && project?.contractNo) {

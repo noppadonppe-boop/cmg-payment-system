@@ -4,7 +4,8 @@ import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { FormField, Input, Textarea, Select } from '../ui/FormField'
 import { AttachmentField } from '../ui/AttachmentField'
-import { calculatePaymentBalance } from '../../lib/paymentCalculations'
+import { calculateClaimFinancials } from '../../lib/paymentCalculations'
+import { normalizePaymentStatus } from '../../lib/paymentStatus'
 import Button from '../ui/Button'
 import { clsx } from 'clsx'
 
@@ -99,7 +100,7 @@ export default function PaymentCreateModal({ projects, onClose }) {
     const mainContractPayments = payments.filter(payment => 
       payment.projectId === form.projectId && 
       payment.claimMainContract === true &&
-      payment.status !== 'Rejected' // Exclude rejected payments
+      normalizePaymentStatus(payment) !== 'PM Rejected'
     )
     
     // Sum up the main contract claim values from existing payments
@@ -130,7 +131,7 @@ export default function PaymentCreateModal({ projects, onClose }) {
     const coaPayments = payments.filter(payment => 
       payment.projectId === form.projectId && 
       payment.claimCOA === true &&
-      payment.status !== 'Rejected' && // Exclude rejected payments
+      normalizePaymentStatus(payment) !== 'PM Rejected' &&
       payment.coaItems && payment.coaItems.some(coaItem => coaItem.coaId === coaId)
     )
     
@@ -374,18 +375,16 @@ export default function PaymentCreateModal({ projects, onClose }) {
   // displayedTCV: ยอดที่แสดงใน Total Claim Value (เปลี่ยนตาม timing)
   //   หักก่อน: (Main+COA) - Retention - Advance + Other Claim
   //   หักหลัง: (Main+COA+Other) - Advance = grandTotal - adv
-  const displayedTCV = retentionReduceTiming === 'before'
-    ? mainCOASum - ret - adv + parseCurrency(form.otherClaim)
-    : grandTotal - adv
-
-  // Calculate balance based on retention reduce timing
-  const retForCalc = retentionReduceTiming === 'before' ? 0 : ret
-  const { grossClaim, withTaxAmount, balanceValue: balance } = calculatePaymentBalance(
-    displayedTCV,
-    0, // advance already deducted from displayedTCV in both cases
-    retForCalc,
-    withTaxPercent
-  )
+  const previewFinancials = calculateClaimFinancials({
+    claimSubtotal: mainCOASum,
+    otherClaim: parseCurrency(form.otherClaim),
+    advanceDeduction: adv,
+    retentionReduce: ret,
+    retentionReduceTiming,
+    withTaxPercent,
+  })
+  const displayedTCV = previewFinancials.value
+  const balance = previewFinancials.balanceValue
 
   const validate = () => {
     const errs = {}
@@ -447,6 +446,8 @@ export default function PaymentCreateModal({ projects, onClose }) {
     const grandTotal = calculateGrandTotal()
     if (grandTotal <= 0) {
       errs.value = 'Total claim value must be greater than 0'
+    } else if (previewFinancials.value <= 0 || previewFinancials.balanceValue < 0) {
+      errs.value = 'Deductions cannot exceed the claim value'
     }
     
     setErrors(errs)
@@ -460,9 +461,6 @@ export default function PaymentCreateModal({ projects, onClose }) {
     try {
       await new Promise(r => setTimeout(r, 350))
       
-      // Calculate grand total
-      const grandTotal = calculateGrandTotal()
-      
       // Calculate deductions
       const finalAdvanceDeduction = calculateAdvanceDeduction()
       const finalRetentionReduce = calculateRetentionReduce()
@@ -473,19 +471,18 @@ export default function PaymentCreateModal({ projects, onClose }) {
       // Compute Main+COA sum (without Other Claim)
       const finalMainCOASum = (claimMainContract ? calculateMainContractTotal() : 0) + (claimCOA ? calculateAllCOATotal() : 0)
       
-      // displayedTCV mirrors what is shown in the UI
-      const finalTCV = retentionReduceTiming === 'before'
-        ? finalMainCOASum - finalRet - finalAdv + parseCurrency(form.otherClaim)
-        : grandTotal - finalAdv
-      
-      let finalValue = finalTCV
-      const finalRetForCalc = retentionReduceTiming === 'before' ? 0 : finalRet
-      const { grossClaim: finalGrossClaim, withTaxAmount: finalWithTaxAmount, balanceValue: finalBalance } = calculatePaymentBalance(
-        finalTCV,
-        0, // advance already deducted from finalTCV
-        finalRetForCalc,
-        finalWithTaxPercent
-      )
+      const finalFinancials = calculateClaimFinancials({
+        claimSubtotal: finalMainCOASum,
+        otherClaim: parseCurrency(form.otherClaim),
+        advanceDeduction: finalAdv,
+        retentionReduce: finalRet,
+        retentionReduceTiming,
+        withTaxPercent: finalWithTaxPercent,
+      })
+      const finalValue = finalFinancials.value
+      const finalGrossClaim = finalFinancials.grossClaimValue
+      const finalWithTaxAmount = finalFinancials.withTaxValue
+      const finalBalance = finalFinancials.balanceValue
       
       // Prepare payment data
       const paymentData = {

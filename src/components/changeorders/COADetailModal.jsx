@@ -10,6 +10,7 @@ import Badge from '../ui/Badge'
 import { Modal } from '../payments/PaymentCreateModal'
 import PaymentDetailModal from '../payments/PaymentDetailModal'
 import { getPaymentCOAAmounts, getPaymentsForCOA } from '../../lib/coaPayments'
+import { normalizePaymentStatus } from '../../lib/paymentStatus'
 import { isAttachmentUrl } from '../../lib/uploadFile'
 
 function fmtCurrency(val) {
@@ -103,7 +104,7 @@ export default function COADetailModal({ coa, onClose, onManagePayment, onUpload
   const totalClaimed = coaPayments.reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).claimValue, 0)
   const totalPaid = coaPayments.reduce((sum, payment) => {
     const amounts = getPaymentCOAAmounts(payment, coa)
-    if (payment.status === 'Received' || payment.status === 'Completed') {
+    if (normalizePaymentStatus(payment) === 'Completed') {
       return sum + (payment.receivedValue ?? payment.incomeConfirmedAmount ?? amounts.balanceValue ?? payment.balanceValue ?? 0)
     }
     return sum

@@ -7,7 +7,8 @@ import { AttachmentLink } from '../ui/AttachmentField'
 import Button from '../ui/Button'
 import Badge from '../ui/Badge'
 import { Modal } from './PaymentCreateModal'
-import { clsx } from 'clsx'
+import { getPaymentFinancials } from '../../lib/paymentCalculations'
+import { normalizePaymentStatus } from '../../lib/paymentStatus'
 
 function fmtCurrency(val) {
   if (!val && val !== 0) return '—'
@@ -29,21 +30,19 @@ function ReadOnlyField({ label, value, className = '' }) {
 
 export default function ApproveModal({ payment, onClose }) {
   const { updatePayment } = useData()
-  const { currentUser, USERS } = useAuth()
+  const { currentUser } = useAuth()
 
   const [action, setAction] = useState(null) // 'approve' | 'reject'
   const [rejectNote, setRejectNote] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const creator = USERS.find(u => u.id === payment.createdBy)
   const { projects, getProjectCOAs } = useData()
   const currentProject = projects.find(p => p.id === payment.projectId)
   const projectCOAs = payment.projectId ? getProjectCOAs(payment.projectId) : []
   
   // Map old status to new for backward compatibility
-  let status = payment.status
-  if (status === 'In Progress') status = 'Pending PM'
-  if (status === 'Submitted') status = 'Invoice Pending PM'
+  const status = normalizePaymentStatus(payment)
+  const paymentFinancials = getPaymentFinancials(payment)
   
   // Determine which stage we're in
   const isStage1 = status === 'Pending PM' // PM reviewing initial payment claim
@@ -55,7 +54,7 @@ export default function ApproveModal({ payment, onClose }) {
     
     if (isStage1) {
       // Stage 1.1: Approve payment claim -> PM Approved
-      updatePayment(payment.id, {
+      await updatePayment(payment.id, {
         status: 'PM Approved',
         approvedBy: currentUser.id,
         approvedAt: new Date().toISOString().split('T')[0],
@@ -65,7 +64,7 @@ export default function ApproveModal({ payment, onClose }) {
       })
     } else if (isStage2) {
       // Stage 2.1: Approve invoice -> Client Sign Pending
-      updatePayment(payment.id, {
+      await updatePayment(payment.id, {
         status: 'Client Sign Pending',
         invoiceApprovedBy: currentUser.id,
         invoiceApprovedAt: new Date().toISOString().split('T')[0],
@@ -85,7 +84,7 @@ export default function ApproveModal({ payment, onClose }) {
     
     if (isStage1) {
       // Stage 1.1: Reject payment claim -> PM Rejected (back to Draft)
-      updatePayment(payment.id, {
+      await updatePayment(payment.id, {
         status: 'PM Rejected',
         rejectedBy: currentUser.id,
         rejectedAt: new Date().toISOString().split('T')[0],
@@ -93,7 +92,7 @@ export default function ApproveModal({ payment, onClose }) {
       })
     } else if (isStage2) {
       // Stage 2.1: Reject invoice -> Invoice PM Rejected (back to Invoice Draft)
-      updatePayment(payment.id, {
+      await updatePayment(payment.id, {
         status: 'Invoice PM Rejected',
         invoiceRejectedBy: currentUser.id,
         invoiceRejectedAt: new Date().toISOString().split('T')[0],
@@ -305,15 +304,11 @@ export default function ApproveModal({ payment, onClose }) {
           <div className="p-4">
             <div className="space-y-2 text-sm">
               {(() => {
-                const mainTotal = payment.claimMainContract
-                  ? payment.mainContractItems?.reduce((sum, item) => sum + (item.value || 0), 0) || 0
-                  : 0
-                const coaTotal = payment.claimCOA
-                  ? payment.coaItems?.reduce((sum, coa) => sum + (coa.items?.reduce((s, item) => s + (item.value || 0), 0) || 0), 0) || 0
-                  : 0
+                const mainTotal = paymentFinancials.mainContractValue
+                const coaTotal = paymentFinancials.coaValue
                 const hasMain = mainTotal > 0
                 const hasCOA = coaTotal > 0
-                const totalClaim = mainTotal + coaTotal + (payment.otherClaim || 0)
+                const totalClaim = paymentFinancials.value
 
                 return (
                   <>
@@ -362,7 +357,7 @@ export default function ApproveModal({ payment, onClose }) {
               )}
               <div className="flex justify-between items-center py-2 bg-emerald-50 px-3 rounded-lg mt-1">
                 <span className="font-semibold text-slate-700">Balance Payable</span>
-                <span className="text-lg font-bold text-emerald-700">{fmtCurrency(payment.balanceValue)}</span>
+                <span className="text-lg font-bold text-emerald-700">{fmtCurrency(paymentFinancials.balanceValue)}</span>
               </div>
             </div>
           </div>

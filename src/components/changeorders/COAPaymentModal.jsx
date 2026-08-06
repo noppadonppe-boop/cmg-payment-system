@@ -14,9 +14,12 @@ import ApproveModal from '../payments/ApproveModal'
 import InvoiceModal from '../payments/InvoiceModal'
 import ReceivedModal from '../payments/ReceivedModal'
 import PaymentDetailModal from '../payments/PaymentDetailModal'
-import { MiniStepper, PAYMENT_STATUS } from '../../pages/PaymentsPage'
+import PaymentEditModal from '../payments/PaymentEditModal'
+import { MiniStepper } from '../../pages/PaymentsPage'
 import { clsx } from 'clsx'
 import { getPaymentCOAAmounts, getPaymentsForCOA } from '../../lib/coaPayments'
+import { calculateClaimFinancials } from '../../lib/paymentCalculations'
+import { PAYMENT_STATUS, normalizePaymentStatus } from '../../lib/paymentStatus'
 
 function fmtCurrency(val) {
   if (!val && val !== 0) return '—'
@@ -25,22 +28,20 @@ function fmtCurrency(val) {
   return `฿${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rounded)}`
 }
 
-function fmtDate(d) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
 export default function COAPaymentModal({ coa, onClose }) {
-  const { projects, payments, addPayment } = useData()
-  const { currentUser, USERS, can } = useAuth()
+  const { projects, payments } = useData()
+  const { USERS, can } = useAuth()
 
   const project    = projects.find(p => p.id === coa.projectId)
   const coaPayments = getPaymentsForCOA(payments, coa)
 
   const totalReceived = coaPayments
-    .filter(p => p.status === 'Received')
+    .filter(p => normalizePaymentStatus(p) === 'Completed')
     .reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).balanceValue, 0)
-  const balance = (coa.value || 0) - totalReceived
+  const totalClaimed = coaPayments
+    .filter(p => normalizePaymentStatus(p) !== 'PM Rejected')
+    .reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).claimValue, 0)
+  const balance = (coa.value || 0) - totalClaimed
 
   const isPM     = can('canApprovePayments')
   const isQsEng  = can('canCreateClaims')
@@ -52,17 +53,23 @@ export default function COAPaymentModal({ coa, onClose }) {
   const [approvePayment, setApprovePayment]   = useState(null)
   const [invoicePayment, setInvoicePayment]   = useState(null)
   const [receivedPayment, setReceivedPayment] = useState(null)
+  const [editPayment, setEditPayment] = useState(null)
 
   const getActions = (pay) => {
     const actions = []
-    if (isPM && pay.status === 'In Progress') {
+    const status = normalizePaymentStatus(pay)
+    if (isPM && (status === 'Pending PM' || status === 'Invoice Pending PM')) {
       actions.push({ label: 'Review', variant: 'primary', onClick: () => setApprovePayment(pay) })
     }
-    if (isQsEng && pay.status === 'Submitted' && !pay.invoiceNo) {
-      actions.push({ label: 'Issue Invoice', variant: 'primary', onClick: () => setInvoicePayment(pay) })
+    if (isQsEng && ['PM Approved', 'Invoice Draft', 'Invoice PM Rejected', 'Client Sign Pending'].includes(status)) {
+      const label = status === 'PM Approved' ? 'Create Invoice' : status === 'Client Sign Pending' ? 'Upload Signed Invoice' : 'Continue Invoice'
+      actions.push({ label, variant: 'primary', onClick: () => setInvoicePayment(pay) })
     }
-    if (isAccCMG && pay.status === 'Submitted' && pay.invoiceNo) {
-      actions.push({ label: 'Confirm Receipt', variant: 'emerald', onClick: () => setReceivedPayment(pay) })
+    if (isQsEng && status === 'PM Rejected') {
+      actions.push({ label: 'Edit & Resubmit', variant: 'primary', onClick: () => setEditPayment(pay) })
+    }
+    if (isAccCMG && ['Invoice Submitted', 'Income Confirm Pending'].includes(status)) {
+      actions.push({ label: status === 'Invoice Submitted' ? 'Accept' : 'Confirm Receive', variant: 'emerald', onClick: () => setReceivedPayment(pay) })
     }
     return actions
   }
@@ -138,7 +145,8 @@ export default function COAPaymentModal({ coa, onClose }) {
             ) : (
               <div className="space-y-2.5">
                 {coaPayments.map(pay => {
-                  const sc      = PAYMENT_STATUS[pay.status] ?? PAYMENT_STATUS['In Progress']
+                  const normalizedStatus = normalizePaymentStatus(pay)
+                  const sc      = PAYMENT_STATUS[normalizedStatus] ?? PAYMENT_STATUS['Pending PM']
                   const creator = USERS.find(u => u.id === pay.createdBy)
                   const actions = getActions(pay)
                   const StatusIcon = sc.icon
@@ -152,10 +160,10 @@ export default function COAPaymentModal({ coa, onClose }) {
                       <div className="flex">
                         <div className={clsx(
                           'w-1 shrink-0',
-                          pay.status === 'Received'    && 'bg-emerald-500',
-                          pay.status === 'Submitted'   && 'bg-blue-500',
-                          pay.status === 'In Progress' && 'bg-amber-400',
-                          pay.status === 'Rejected'    && 'bg-rose-500',
+                          normalizedStatus === 'Completed' && 'bg-emerald-500',
+                          normalizedStatus === 'Invoice Submitted' && 'bg-blue-500',
+                          normalizedStatus.includes('Pending') && 'bg-amber-400',
+                          normalizedStatus.includes('Rejected') && 'bg-rose-500',
                         )} />
                         <div className="flex-1 p-3">
                           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -190,7 +198,7 @@ export default function COAPaymentModal({ coa, onClose }) {
                                 </div>
                               </div>
 
-                              <MiniStepper status={pay.status} />
+                              <MiniStepper status={normalizedStatus} />
 
                               <div className="flex items-center gap-1.5">
                                 <button
@@ -251,6 +259,14 @@ export default function COAPaymentModal({ coa, onClose }) {
       {receivedPayment && (
         <ReceivedModal payment={receivedPayment} onClose={() => setReceivedPayment(null)} />
       )}
+      {editPayment && (
+        <PaymentEditModal
+          payment={editPayment}
+          projects={coaProjects}
+          onClose={() => setEditPayment(null)}
+          onSaved={() => setEditPayment(null)}
+        />
+      )}
     </>
   )
 }
@@ -262,6 +278,9 @@ function COAPaymentCreateModal({ coa, project, onClose }) {
 
   const existing = getPaymentsForCOA(payments, coa).length
   const prefix   = project?.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 3) ?? 'COA'
+  const availableBalance = (coa.value || 0) - getPaymentsForCOA(payments, coa)
+    .filter(payment => normalizePaymentStatus(payment) !== 'PM Rejected')
+    .reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).claimValue, 0)
 
   const [form, setForm] = useState({
     paymentNo:        `PMT-COA-${prefix}-${String(existing + 1).padStart(3, '0')}`,
@@ -292,13 +311,22 @@ function COAPaymentCreateModal({ coa, project, onClose }) {
   const value   = parseCurrency(form.value)
   const adv     = parseCurrency(form.advanceDeduction)
   const ret     = parseCurrency(form.retentionReduce)
-  const balance = value - adv - ret
+  const previewFinancials = calculateClaimFinancials({
+    claimSubtotal: value,
+    advanceDeduction: adv,
+    retentionReduce: ret,
+    retentionReduceTiming: 'after',
+    withTaxPercent: 0,
+  })
+  const balance = previewFinancials.balanceValue
 
   const validate = () => {
     const errs = {}
     if (!form.paymentNo.trim()) errs.paymentNo = 'Payment number required'
     if (!form.detail.trim())    errs.detail    = 'Description required'
     if (!form.value || value <= 0) errs.value  = 'Enter a valid value'
+    else if (value > availableBalance) errs.value = `Claim exceeds available COA balance (${fmtCurrency(availableBalance)})`
+    else if (previewFinancials.value <= 0 || previewFinancials.balanceValue < 0) errs.value = 'Deductions cannot exceed the claim value'
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -307,20 +335,44 @@ function COAPaymentCreateModal({ coa, project, onClose }) {
     if (!validate()) return
     setSaving(true)
     await new Promise(r => setTimeout(r, 350))
-    addPayment({
+    const financials = calculateClaimFinancials({
+      claimSubtotal: value,
+      advanceDeduction: adv,
+      retentionReduce: ret,
+      retentionReduceTiming: 'after',
+      withTaxPercent: 0,
+    })
+    await addPayment({
       projectId:        coa.projectId,
       coaId:            coa.id,
+      coaNo:            coa.coaNo,
       type:             'coa',
       paymentNo:        form.paymentNo,
       detail:           form.detail,
-      value,
+      value:            financials.value,
       advanceDeduction: adv,
+      advanceDeductionType: adv > 0 ? 'amount' : null,
+      advanceDeductionValue: adv > 0 ? adv : null,
+      advanceDeductionSources: adv > 0 ? { mainContract: false, coa: true } : null,
       retentionReduce:  ret,
-      balanceValue:     balance,
+      retentionReduceType: ret > 0 ? 'amount' : null,
+      retentionReduceValue: ret > 0 ? ret : null,
+      retentionReduceTiming: ret > 0 ? 'after' : null,
+      withTaxPercent: 0,
+      withTaxValue: financials.withTaxValue,
+      grossClaimValue: financials.grossClaimValue,
+      balanceValue: financials.balanceValue,
       attachment:       form.attachment,
       note:             form.note,
-      status:           'In Progress',
+      status:           'Pending PM',
       createdBy:        currentUser.id,
+      claimMainContract: false,
+      claimCOA: true,
+      coaItems: [{
+        coaId: coa.id,
+        coaNo: coa.coaNo,
+        items: [{ no: '1', description: form.detail, value }],
+      }],
       invoiceNo: null, invoiceDueDate: null, invoiceNote: null,
       invoiceSubmittedAt: null,
       receivedDate: null, receivedAttachment: null, receivedNote: null,

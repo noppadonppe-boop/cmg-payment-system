@@ -8,6 +8,8 @@ import { useAuth } from '../context/AuthContext'
 import Card, { CardHeader } from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import { clsx } from 'clsx'
+import { getPaymentFinancials } from '../lib/paymentCalculations'
+import { PAYMENT_STATUS, normalizePaymentStatus } from '../lib/paymentStatus'
 
 function fmtCurrency(val) {
   if (!val && val !== 0) return '—'
@@ -17,6 +19,11 @@ function fmtCurrency(val) {
 }
 
 const STATUS_COLORS = {
+  'Completed':   { dot: 'bg-emerald-500', badge: 'emerald', label: 'Completed' },
+  'Invoice Submitted': { dot: 'bg-blue-500', badge: 'blue', label: 'Invoice Submitted' },
+  'Income Confirm Pending': { dot: 'bg-amber-500', badge: 'amber', label: 'Income Confirm Pending' },
+  'Pending PM':  { dot: 'bg-amber-500', badge: 'amber', label: 'Pending PM' },
+  'PM Rejected': { dot: 'bg-rose-500', badge: 'rose', label: 'PM Rejected' },
   'Received':    { dot: 'bg-emerald-500', badge: 'emerald', label: 'Received' },
   'Submitted':   { dot: 'bg-blue-500',    badge: 'blue',    label: 'Submitted' },
   'In Progress': { dot: 'bg-amber-500',   badge: 'amber',   label: 'In Progress' },
@@ -33,8 +40,8 @@ export default function DashboardPage() {
   const visibleCORs     = cors.filter(c => hasProjectAccess(c.projectId))
 
   const totalContractValue = visibleProjects.reduce((s, p) => s + (p.contractValue || 0), 0)
-  const totalReceived      = visiblePayments.filter(p => p.status === 'Received').reduce((s, p) => s + (p.balanceValue || 0), 0)
-  const pendingPayments    = visiblePayments.filter(p => p.status !== 'Received').length
+  const totalReceived      = visiblePayments.filter(p => normalizePaymentStatus(p) === 'Completed').reduce((s, p) => s + getPaymentFinancials(p).balanceValue, 0)
+  const pendingPayments    = visiblePayments.filter(p => normalizePaymentStatus(p) !== 'Completed').length
   const openCORs           = visibleCORs.filter(c => !c.convertedToCOA).length
 
   const recentPayments = [...visiblePayments]
@@ -143,7 +150,13 @@ export default function DashboardPage() {
                 <div className="py-10 text-center text-slate-400 text-sm">No payments yet</div>
               ) : recentPayments.map(pay => {
                 const project = projects.find(p => p.id === pay.projectId)
-                const sc = STATUS_COLORS[pay.status] ?? STATUS_COLORS['In Progress']
+                const normalizedStatus = normalizePaymentStatus(pay)
+                const statusInfo = PAYMENT_STATUS[normalizedStatus]
+                const sc = STATUS_COLORS[normalizedStatus] ?? {
+                  dot: statusInfo?.badge === 'rose' ? 'bg-rose-500' : statusInfo?.step === 2 ? 'bg-blue-400' : 'bg-amber-500',
+                  badge: statusInfo?.badge || 'amber',
+                  label: statusInfo?.label || normalizedStatus,
+                }
                 return (
                   <div key={pay.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors">
                     <div className={clsx('w-2 h-2 rounded-full shrink-0', sc.dot)} />

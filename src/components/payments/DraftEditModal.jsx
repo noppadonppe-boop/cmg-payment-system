@@ -5,9 +5,10 @@ import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { FormField, Input, Textarea, Select } from '../ui/FormField'
 import { AttachmentField } from '../ui/AttachmentField'
-import { calculatePaymentBalance } from '../../lib/paymentCalculations'
+import { calculateClaimFinancials } from '../../lib/paymentCalculations'
 import Button from '../ui/Button'
 import { clsx } from 'clsx'
+import { normalizePaymentStatus } from '../../lib/paymentStatus'
 
 function parseCurrency(val) {
   return parseFloat(String(val || '').replace(/,/g, '')) || 0
@@ -38,7 +39,7 @@ function fmtInput(val) {
 }
 
 export default function DraftEditModal({ payment, onClose, onSaved }) {
-  const { updatePayment, getProjectCOAs, projects } = useData()
+  const { updatePayment, getProjectCOAs, projects, payments } = useData()
   const { currentUser } = useAuth()
 
   const [form, setForm] = useState({
@@ -66,6 +67,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
   const [useRetentionReduce, setUseRetentionReduce] = useState(!!payment?.retentionReduce)
   const [retentionReduceType, setRetentionReduceType] = useState(payment?.retentionReduceType || 'percentage')
   const [retentionReduceValue, setRetentionReduceValue] = useState(payment?.retentionReduceValue ? String(payment.retentionReduceValue) : '')
+  const [retentionReduceTiming] = useState(payment?.retentionReduceTiming || 'after')
 
   // Claim type state - Load from payment
   const [claimMainContract, setClaimMainContract] = useState(payment?.claimMainContract || false)
@@ -106,6 +108,22 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
   // Get current project and its COAs
   const currentProject = projects.find(p => p.id === form.projectId)
   const projectCOAs = form.projectId ? getProjectCOAs(form.projectId) : []
+  const otherActivePayments = payments.filter(item =>
+    item.id !== payment.id &&
+    item.projectId === form.projectId &&
+    normalizePaymentStatus(item) !== 'PM Rejected'
+  )
+  const mainAvailableBalance = (currentProject?.originalContractValue || currentProject?.contractValue || 0) -
+    otherActivePayments.filter(item => item.claimMainContract).reduce((sum, item) =>
+      sum + (item.mainContractItems || []).reduce((itemSum, row) => itemSum + Number(row.value || 0), 0), 0)
+  const getCOAAvailableBalance = coaId => {
+    const coa = projectCOAs.find(item => item.id === coaId)
+    const claimed = otherActivePayments.filter(item => item.claimCOA).reduce((sum, item) => {
+      const match = item.coaItems?.find(coaItem => coaItem.coaId === coaId)
+      return sum + (match?.items || []).reduce((itemSum, row) => itemSum + Number(row.value || 0), 0)
+    }, 0)
+    return Number(coa?.value || 0) - claimed
+  }
 
   // Calculate max allowed value based on claim type
   const getMaxAllowedValue = () => {
@@ -200,7 +218,10 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
 
   // Calculate base value for retention reduce
   const getRetentionReduceBase = () => {
-    // Retention Reduce คำนวณจาก Total Claim Value (หลังหัก Advance)
+    if (retentionReduceTiming === 'before') {
+      return (claimMainContract ? calculateMainContractTotal() : 0) +
+        (claimCOA ? calculateAllCOATotal() : 0)
+    }
     return grandTotal - calculateAdvanceDeduction()
   }
 
@@ -313,15 +334,19 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
   // Use grand total for calculations
   const grandTotal = calculateGrandTotal()
   const adv = calculateAdvanceDeduction()
-  const totalClaimValue = grandTotal - adv // Total Claim Value หลังหัก Advance
-
   const ret = calculateRetentionReduce()
   const withTaxPercent = parseCurrency(form.withTaxPercent)
-
-  // Calculate balance: (Total Claim Value × 1.07) - Retention - With Tax
-  // Note: ส่ง totalClaimValue ไปให้ calculatePaymentBalance แทน grandTotal
-  // และส่ง advanceDeduction = 0 เพราะหักไปแล้ว
-  const { grossClaim, withTaxAmount, balanceValue: balance } = calculatePaymentBalance(totalClaimValue, 0, ret, withTaxPercent)
+  const mainCOASum = (claimMainContract ? calculateMainContractTotal() : 0) + (claimCOA ? calculateAllCOATotal() : 0)
+  const previewFinancials = calculateClaimFinancials({
+    claimSubtotal: mainCOASum,
+    otherClaim: parseCurrency(form.otherClaim),
+    advanceDeduction: adv,
+    retentionReduce: ret,
+    retentionReduceTiming,
+    withTaxPercent,
+  })
+  const totalClaimValue = previewFinancials.value
+  const balance = previewFinancials.balanceValue
 
   const validate = () => {
     const errs = {}
@@ -345,6 +370,8 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
       const maxValue = currentProject?.originalContractValue || currentProject?.contractValue || 0
       if (total > maxValue) {
         errs.mainContractValue = `Total claim value (฿${total.toLocaleString()}) exceeds Main Contract Value (฿${maxValue.toLocaleString()})`
+      } else if (total > mainAvailableBalance) {
+        errs.mainContractValue = `Total claim value exceeds available Main Contract Balance (฿${mainAvailableBalance.toLocaleString()})`
       }
     }
 
@@ -366,6 +393,8 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
           const maxValue = coa?.value || 0
           if (total > maxValue) {
             errs[`coaValue_${coaItem.coaId}`] = `Total claim value (฿${total.toLocaleString()}) exceeds ${coa?.coaNo} Value (฿${maxValue.toLocaleString()})`
+          } else if (total > getCOAAvailableBalance(coaItem.coaId)) {
+            errs[`coaValue_${coaItem.coaId}`] = `Total claim value exceeds available ${coa?.coaNo} balance (฿${getCOAAvailableBalance(coaItem.coaId).toLocaleString()})`
           }
         })
       }
@@ -375,6 +404,8 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
     const grandTotal = calculateGrandTotal()
     if (grandTotal <= 0) {
       errs.value = 'Total claim value must be greater than 0'
+    } else if (previewFinancials.value <= 0 || previewFinancials.balanceValue < 0) {
+      errs.value = 'Deductions cannot exceed the claim value'
     }
 
     setErrors(errs)
@@ -388,24 +419,27 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
     try {
       await new Promise(r => setTimeout(r, 350))
 
-      // Calculate grand total
-      const grandTotal = calculateGrandTotal()
-
       // Calculate deductions
       const finalAdvanceDeduction = calculateAdvanceDeduction()
-      const totalClaimValue = grandTotal - finalAdvanceDeduction // Total Claim Value หลังหัก Advance
-
       const finalRetentionReduce = calculateRetentionReduce()
 
       // Recalculate financial values based on Total Claim Value
-      const finalValue = totalClaimValue
       const finalAdv = finalAdvanceDeduction
       const finalRet = finalRetentionReduce
       const finalWithTaxPercent = parseCurrency(form.withTaxPercent)
-
-      // Calculate balance: (Total Claim Value × 1.07) - Retention - With Tax
-      const { grossClaim: finalGrossClaim, withTaxAmount: finalWithTaxAmount, balanceValue: finalBalance } =
-        calculatePaymentBalance(finalValue, 0, finalRet, finalWithTaxPercent)
+      const finalMainCOASum = (claimMainContract ? calculateMainContractTotal() : 0) + (claimCOA ? calculateAllCOATotal() : 0)
+      const finalFinancials = calculateClaimFinancials({
+        claimSubtotal: finalMainCOASum,
+        otherClaim: parseCurrency(form.otherClaim),
+        advanceDeduction: finalAdv,
+        retentionReduce: finalRet,
+        retentionReduceTiming,
+        withTaxPercent: finalWithTaxPercent,
+      })
+      const finalValue = finalFinancials.value
+      const finalGrossClaim = finalFinancials.grossClaimValue
+      const finalWithTaxAmount = finalFinancials.withTaxValue
+      const finalBalance = finalFinancials.balanceValue
 
       const today = new Date().toISOString().split('T')[0]
 
@@ -424,6 +458,7 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
         retentionReduce: finalRet,
         retentionReduceType: useRetentionReduce ? retentionReduceType : null,
         retentionReduceValue: useRetentionReduce ? parseCurrency(retentionReduceValue) : null,
+        retentionReduceTiming: useRetentionReduce ? retentionReduceTiming : null,
         withTaxPercent: finalWithTaxPercent,
         withTaxValue: finalWithTaxAmount,
         grossClaimValue: finalGrossClaim,

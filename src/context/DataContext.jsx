@@ -4,6 +4,7 @@ import {
   deleteDoc, writeBatch,
 } from 'firebase/firestore'
 import { db, masterDb } from '../firebase'
+import { getPaymentFinancials } from '../lib/paymentCalculations'
 
 const ROOT = 'CMG-payment-system/root'
 const col = (name) => collection(db, `${ROOT}/${name}`)
@@ -316,17 +317,17 @@ export function DataProvider({ children }) {
       onSnapshot(col(colName), snap => {
         let data = snap.docs.map(d => ({ ...d.data(), id: d.id }))
         
-        // Fix historical floating point errors for payments
+        // Keep every consumer on the same canonical payment calculation.
         if (colName === 'payments') {
           data = data.map(p => {
-            if (p.value !== undefined) {
-              const val = p.value || 0
-              const vatAmount = Math.round(val * 0.07 * 100) / 100
-              const retDeduction = p.retentionReduceTiming === 'after' ? (p.retentionReduce || 0) : 0
-              const wht = Math.round((p.withTaxValue || 0) * 100) / 100
-              p.balanceValue = val + vatAmount - retDeduction - wht
+            const financials = getPaymentFinancials(p)
+            return {
+              ...p,
+              value: financials.value,
+              grossClaimValue: financials.grossClaimValue,
+              withTaxValue: financials.withTaxValue,
+              balanceValue: financials.balanceValue,
             }
-            return p
           })
         }
         

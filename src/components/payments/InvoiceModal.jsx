@@ -8,6 +8,8 @@ import Button from '../ui/Button'
 import Badge from '../ui/Badge'
 import { Modal } from './PaymentCreateModal'
 import THBText from 'thai-baht-text'
+import { getPaymentFinancials } from '../../lib/paymentCalculations'
+import { normalizePaymentStatus } from '../../lib/paymentStatus'
 
 function fmtCurrency(val) {
   if (!val && val !== 0) return '—'
@@ -16,13 +18,13 @@ function fmtCurrency(val) {
   return `฿${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rounded)}`
 }
 
-export default function InvoiceModal({ payment, onClose }) {
+export default function InvoiceModal({ payment, onClose, onEditPayment }) {
   const { updatePayment, projects } = useData()
   const { currentUser } = useAuth()
 
   // Map old status
-  let status = payment.status
-  if (status === 'Submitted') status = 'PM Approved'
+  const status = normalizePaymentStatus(payment)
+  const financials = getPaymentFinancials(payment)
   
   // Determine which stage we're in
   const isCreatingInvoice = status === 'PM Approved' // Creating invoice draft
@@ -121,7 +123,7 @@ export default function InvoiceModal({ payment, onClose }) {
       updates.clientSignedAt = new Date().toISOString().split('T')[0]
     }
     
-    updatePayment(payment.id, updates)
+    await updatePayment(payment.id, updates)
     setSaving(false)
     onClose()
   }
@@ -131,27 +133,8 @@ export default function InvoiceModal({ payment, onClose }) {
   }
 
   // คำนวณมูลค่ารวมของรายการ (Main Contract + COA + Other Claim)
-  let itemSum = 0
-  if (payment.claimMainContract || payment.claimCOA) {
-    const mainItemSum = payment.claimMainContract
-      ? payment.mainContractItems?.reduce((acc, it) => acc + (it.value || 0), 0) || 0
-      : 0
-    const coaItemSum = payment.claimCOA
-      ? payment.coaItems?.reduce((acc, coa) => acc + (coa.items?.reduce((s, it) => s + (it.value || 0), 0) || 0), 0) || 0
-      : 0
-
-    itemSum = mainItemSum + coaItemSum
-  } else {
-    itemSum = payment.value
-  }
-  
-  // Other Claim เป็นการหัก ไม่ใช่เพิ่ม
-  if (payment.otherClaim && payment.otherClaim > 0) {
-    itemSum -= payment.otherClaim
-  }
-
-  const displayVat = payment.vatValue ?? (itemSum * 0.07)
-  const visualTotal = itemSum + displayVat
+  const displayVat = financials.vatAmount
+  const visualTotal = financials.grossClaimValue
 
   const invoicePreview = (
     <div className="print-area flex justify-center bg-slate-100 py-8 print:p-0 print:bg-white overflow-auto max-h-[70vh] print:max-h-none print:overflow-visible">
@@ -309,14 +292,14 @@ export default function InvoiceModal({ payment, onClose }) {
               </Fragment>
             ))}
 
-            {/* Other Claim - แสดงเป็นรายการหัก */}
+            {/* Other Claim */}
             {payment.otherClaim && payment.otherClaim > 0 && (
               <tr>
-                <td className="border-r border-black pl-5 pr-3 py-1 align-top font-semibold text-rose-700">
-                  <span className="underline">Deduct</span> Other Claim
+                <td className="border-r border-black pl-5 pr-3 py-1 align-top font-semibold">
+                  Other Claim
                 </td>
-                <td className="pr-6 py-1 align-top text-right font-bold text-[11px] text-rose-700">
-                  -{fmtInvoiceCurrency(payment.otherClaim)}
+                <td className="pr-6 py-1 align-top text-right font-bold text-[11px]">
+                  {fmtInvoiceCurrency(payment.otherClaim)}
                 </td>
               </tr>
             )}
@@ -337,6 +320,14 @@ export default function InvoiceModal({ payment, onClose }) {
                 <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(payment.advanceDeduction)}</td>
               </tr>
             )}
+            {payment.retentionReduceTiming === 'before' && payment.retentionReduce > 0 && (
+              <tr>
+                <td className="border-r border-black text-right pr-4 py-1 font-bold text-[11px] leading-tight">
+                  <span className="underline">Deduct</span> Retention (Before VAT)
+                </td>
+                <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(payment.retentionReduce)}</td>
+              </tr>
+            )}
             <tr>
               <td className="border-r border-black text-right pr-4 py-1 font-bold text-[11px] leading-tight">VAT 7%</td>
               <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(displayVat)}</td>
@@ -345,23 +336,25 @@ export default function InvoiceModal({ payment, onClose }) {
               <td className="border-r border-black text-right pr-4 py-1 font-bold text-[11px] leading-tight">Total</td>
               <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(visualTotal)}</td>
             </tr>
-            <tr>
-              <td className="border-r border-black text-right pr-4 py-1 font-bold text-[11px] leading-tight">
-                <span className="underline">Deduct</span> {payment.retentionReduceValue || '10'}% Retention
-              </td>
-              <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(payment.retentionReduce || 0)}</td>
-            </tr>
+            {payment.retentionReduceTiming !== 'before' && (
+              <tr>
+                <td className="border-r border-black text-right pr-4 py-1 font-bold text-[11px] leading-tight">
+                  <span className="underline">Deduct</span> {payment.retentionReduceValue || '10'}% Retention
+                </td>
+                <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(payment.retentionReduce || 0)}</td>
+              </tr>
+            )}
             <tr>
               <td className="border-r border-black text-right pr-4 py-1 font-bold text-[11px] leading-tight pb-2">
                 Withhoding Tax ={payment.withTaxPercent || 3}%
               </td>
-              <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight pb-2">{fmtInvoiceCurrency(payment.withTaxValue || 0)}</td>
+              <td className="text-right pr-6 py-1 font-bold text-[11px] leading-tight pb-2">{fmtInvoiceCurrency(financials.withTaxValue)}</td>
             </tr>
 
             {/* NET TOTAL */}
             <tr>
               <td className="border-r border-black text-right pr-4 pt-4 pb-2 font-bold text-[11px] leading-tight">NET TOTAL</td>
-              <td className="text-right pr-6 pt-4 pb-2 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(payment.balanceValue)}</td>
+              <td className="text-right pr-6 pt-4 pb-2 font-bold text-[11px] leading-tight">{fmtInvoiceCurrency(financials.balanceValue)}</td>
             </tr>
 
             {/* Bank Details */}
@@ -384,7 +377,7 @@ export default function InvoiceModal({ payment, onClose }) {
             {/* Thai Baht Text Row */}
             <tr className="border-t border-black bg-white">
               <td colSpan="2" className="py-2 px-2 font-bold text-[11px]">
-                {THBText(payment.balanceValue || 0)}
+                {THBText(financials.balanceValue || 0)}
               </td>
             </tr>
           </tbody>
@@ -560,12 +553,12 @@ export default function InvoiceModal({ payment, onClose }) {
                 <span className="text-emerald-900">Balance</span>
               </div>
               <div className="grid grid-cols-6 px-2 py-1.5 text-center items-center">
-                <span className="text-[10px] font-semibold text-emerald-800">{fmtCurrency(payment.value)}</span>
-                <span className="text-[10px] font-medium text-emerald-600">+{fmtCurrency(payment.value * 0.07)}</span>
+                <span className="text-[10px] font-semibold text-emerald-800">{fmtCurrency(financials.value)}</span>
+                <span className="text-[10px] font-medium text-emerald-600">+{fmtCurrency(financials.vatAmount)}</span>
                 <span className="text-[10px] font-medium text-rose-600">−{fmtCurrency(payment.advanceDeduction)}</span>
                 <span className="text-[10px] font-medium text-rose-600">−{fmtCurrency(payment.retentionReduce)}</span>
-                <span className="text-[10px] font-medium text-rose-600">-{fmtCurrency(payment.withTaxValue || 0)}</span>
-                <span className="text-xs font-bold text-emerald-900">{fmtCurrency(payment.balanceValue)}</span>
+                <span className="text-[10px] font-medium text-rose-600">-{fmtCurrency(financials.withTaxValue)}</span>
+                <span className="text-xs font-bold text-emerald-900">{fmtCurrency(financials.balanceValue)}</span>
               </div>
             </div>
           </div>
@@ -680,6 +673,16 @@ export default function InvoiceModal({ payment, onClose }) {
       )}
 
       <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-slate-100 print:hidden">
+        {isResubmittingInvoice && onEditPayment && (
+          <Button
+            variant="secondary"
+            icon={ArrowLeft}
+            className="mr-auto"
+            onClick={onEditPayment}
+          >
+            Back to Edit Payment Claim
+          </Button>
+        )}
         {showPreview ? (
           <>
             <Button variant="secondary" icon={ArrowLeft} onClick={() => setShowPreview(false)}>

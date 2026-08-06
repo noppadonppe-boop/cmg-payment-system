@@ -5,9 +5,10 @@ import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { FormField, Input, Textarea, Select } from '../ui/FormField'
 import { AttachmentField } from '../ui/AttachmentField'
-import { calculatePaymentBalance } from '../../lib/paymentCalculations'
+import { calculateClaimFinancials } from '../../lib/paymentCalculations'
 import Button from '../ui/Button'
 import { clsx } from 'clsx'
+import { normalizePaymentStatus } from '../../lib/paymentStatus'
 
 function parseCurrency(val) {
   return parseFloat(String(val || '').replace(/,/g, '')) || 0
@@ -102,6 +103,22 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
   // Get current project and its COAs
   const currentProject = projects.find(p => p.id === form.projectId)
   const projectCOAs = form.projectId ? getProjectCOAs(form.projectId) : []
+  const otherActivePayments = payments.filter(item =>
+    item.id !== payment.id &&
+    item.projectId === form.projectId &&
+    normalizePaymentStatus(item) !== 'PM Rejected'
+  )
+  const mainAvailableBalance = (currentProject?.originalContractValue || currentProject?.contractValue || 0) -
+    otherActivePayments.filter(item => item.claimMainContract).reduce((sum, item) =>
+      sum + (item.mainContractItems || []).reduce((itemSum, row) => itemSum + Number(row.value || 0), 0), 0)
+  const getCOAAvailableBalance = coaId => {
+    const coa = projectCOAs.find(item => item.id === coaId)
+    const claimed = otherActivePayments.filter(item => item.claimCOA).reduce((sum, item) => {
+      const match = item.coaItems?.find(coaItem => coaItem.coaId === coaId)
+      return sum + (match?.items || []).reduce((itemSum, row) => itemSum + Number(row.value || 0), 0)
+    }, 0)
+    return Number(coa?.value || 0) - claimed
+  }
 
   // Calculate max allowed value based on claim type
   const getMaxAllowedValue = () => {
@@ -329,18 +346,16 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
   // displayedTCV: ยอดที่แสดงใน Total Claim Value (เปลี่ยนตาม timing)
   //   หักก่อน: (Main+COA) - Retention - Advance + Other Claim
   //   หักหลัง: (Main+COA+Other) - Advance = grandTotal - adv
-  const displayedTCV = retentionReduceTiming === 'before'
-    ? mainCOASum - ret - adv + parseCurrency(form.otherClaim)
-    : grandTotal - adv
-
-  // Calculate balance based on retention reduce timing
-  const retForCalc = retentionReduceTiming === 'before' ? 0 : ret
-  const { grossClaim, withTaxAmount, balanceValue: balance } = calculatePaymentBalance(
-    displayedTCV,
-    0, // advance already deducted from displayedTCV in both cases
-    retForCalc,
-    withTaxPercent
-  )
+  const previewFinancials = calculateClaimFinancials({
+    claimSubtotal: mainCOASum,
+    otherClaim: parseCurrency(form.otherClaim),
+    advanceDeduction: adv,
+    retentionReduce: ret,
+    retentionReduceTiming,
+    withTaxPercent,
+  })
+  const displayedTCV = previewFinancials.value
+  const balance = previewFinancials.balanceValue
 
   const validate = () => {
     const errs = {}
@@ -364,6 +379,8 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
       const maxValue = currentProject?.originalContractValue || currentProject?.contractValue || 0
       if (total > maxValue) {
         errs.mainContractValue = `Total claim value (฿${total.toLocaleString()}) exceeds Main Contract Value (฿${maxValue.toLocaleString()})`
+      } else if (total > mainAvailableBalance) {
+        errs.mainContractValue = `Total claim value (฿${total.toLocaleString()}) exceeds available Main Contract Balance (฿${mainAvailableBalance.toLocaleString()})`
       }
     }
     
@@ -385,6 +402,8 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
           const maxValue = coa?.value || 0
           if (total > maxValue) {
             errs[`coaValue_${coaItem.coaId}`] = `Total claim value (฿${total.toLocaleString()}) exceeds ${coa?.coaNo} Value (฿${maxValue.toLocaleString()})`
+          } else if (total > getCOAAvailableBalance(coaItem.coaId)) {
+            errs[`coaValue_${coaItem.coaId}`] = `Total claim value exceeds available ${coa?.coaNo} balance (฿${getCOAAvailableBalance(coaItem.coaId).toLocaleString()})`
           }
         })
       }
@@ -394,6 +413,8 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
     const grandTotal = calculateGrandTotal()
     if (grandTotal <= 0) {
       errs.value = 'Total claim value must be greater than 0'
+    } else if (previewFinancials.value <= 0 || previewFinancials.balanceValue < 0) {
+      errs.value = 'Deductions cannot exceed the claim value'
     }
     
     setErrors(errs)
@@ -407,9 +428,6 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
     try {
       await new Promise(r => setTimeout(r, 350))
       
-      // Calculate grand total
-      const grandTotal = calculateGrandTotal()
-      
       // Calculate deductions
       const finalAdvanceDeduction = calculateAdvanceDeduction()
       const finalRetentionReduce = calculateRetentionReduce()
@@ -420,19 +438,18 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
       // Compute Main+COA sum (without Other Claim)
       const finalMainCOASum = (claimMainContract ? calculateMainContractTotal() : 0) + (claimCOA ? calculateAllCOATotal() : 0)
       
-      // displayedTCV mirrors what is shown in the UI
-      const finalTCV = retentionReduceTiming === 'before'
-        ? finalMainCOASum - finalRet - finalAdv + parseCurrency(form.otherClaim)
-        : grandTotal - finalAdv
-      
-      let finalValue = finalTCV
-      const finalRetForCalc = retentionReduceTiming === 'before' ? 0 : finalRet
-      const { grossClaim: finalGrossClaim, withTaxAmount: finalWithTaxAmount, balanceValue: finalBalance } = calculatePaymentBalance(
-        finalTCV,
-        0, // advance already deducted from finalTCV
-        finalRetForCalc,
-        finalWithTaxPercent
-      )
+      const finalFinancials = calculateClaimFinancials({
+        claimSubtotal: finalMainCOASum,
+        otherClaim: parseCurrency(form.otherClaim),
+        advanceDeduction: finalAdv,
+        retentionReduce: finalRet,
+        retentionReduceTiming,
+        withTaxPercent: finalWithTaxPercent,
+      })
+      const finalValue = finalFinancials.value
+      const finalGrossClaim = finalFinancials.grossClaimValue
+      const finalWithTaxAmount = finalFinancials.withTaxValue
+      const finalBalance = finalFinancials.balanceValue
       
       // Prepare payment data
       const paymentData = {
@@ -462,6 +479,52 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
         rejectedAt:       deleteField(),
         rejectionNote:    deleteField(),
         rejectedBy:       deleteField(),
+
+        // Editing a Payment Claim invalidates every approval and invoice step.
+        // Remove all downstream data so the workflow genuinely starts again at PM review.
+        approvedBy:             deleteField(),
+        approvedAt:             deleteField(),
+        revisionRequest:        deleteField(),
+        invoiceNo:              deleteField(),
+        invoiceDate:            deleteField(),
+        invoiceDueDate:         deleteField(),
+        invoiceNote:            deleteField(),
+        invoiceCreatedAt:       deleteField(),
+        invoiceSubmittedAt:     deleteField(),
+        invoiceIssuedBy:        deleteField(),
+        paymentApprovedDoc:     deleteField(),
+        invoiceApprovedBy:      deleteField(),
+        invoiceApprovedAt:      deleteField(),
+        invoiceRejectedBy:      deleteField(),
+        invoiceRejectedAt:      deleteField(),
+        invoiceRejectionNote:   deleteField(),
+        clientSignedDoc:        deleteField(),
+        clientSignedAt:         deleteField(),
+        acceptedBy:             deleteField(),
+        acceptedAt:             deleteField(),
+        receivedBy:             deleteField(),
+        receivedAt:             deleteField(),
+        receivedDate:           deleteField(),
+        receivedAttachment:     deleteField(),
+        receivedNote:           deleteField(),
+        incomeConfirmedDate:    deleteField(),
+        incomeConfirmedAmount:  deleteField(),
+        incomeConfirmedBy:      deleteField(),
+        incomeConfirmedAt:      deleteField(),
+        receiptNo:              deleteField(),
+        paymentType:            deleteField(),
+        cashAmount:             deleteField(),
+        chequeNo:               deleteField(),
+        chequeBank:             deleteField(),
+        chequeBranch:           deleteField(),
+        chequeDate:             deleteField(),
+        transferAmount:         deleteField(),
+        transferBank:           deleteField(),
+        transferBranch:         deleteField(),
+        transferDate:           deleteField(),
+        collector:              deleteField(),
+        collectionDate:         deleteField(),
+        withholdingTaxDoc:      deleteField(),
       }
       
       // Add claim-specific data

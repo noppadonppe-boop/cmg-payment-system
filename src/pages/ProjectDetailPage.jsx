@@ -210,7 +210,7 @@ function DetailContract({ project, projectCOAs }) {
     if (!coa) return 0
     
     const coaPayments = getPaymentsForCOA(payments, coa)
-    const totalClaimed = coaPayments.reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).balanceValue, 0)
+    const totalClaimed = coaPayments.reduce((sum, payment) => sum + getPaymentCOAAmounts(payment, coa).claimValue, 0)
     
     return (coa.value || 0) - totalClaimed
   }
