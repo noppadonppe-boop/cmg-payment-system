@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { X, Save, Calculator, Plus, Trash2 } from 'lucide-react'
+import { deleteField } from 'firebase/firestore'
 import { useData } from '../../context/DataContext'
 import { useAuth } from '../../context/AuthContext'
 import { FormField, Input, Textarea, Select } from '../ui/FormField'
@@ -442,6 +443,8 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
           description: item.description,
           value: parseCurrency(item.value)
         }))
+      } else {
+        paymentData.mainContractItems = deleteField()
       }
 
       if (claimCOA) {
@@ -457,6 +460,8 @@ export default function DraftEditModal({ payment, onClose, onSaved }) {
             }))
           }
         })
+      } else {
+        paymentData.coaItems = deleteField()
       }
 
       await updatePayment(payment.id, paymentData)

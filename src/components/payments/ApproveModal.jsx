@@ -305,8 +305,12 @@ export default function ApproveModal({ payment, onClose }) {
           <div className="p-4">
             <div className="space-y-2 text-sm">
               {(() => {
-                const mainTotal = payment.mainContractItems?.reduce((sum, item) => sum + (item.value || 0), 0) || 0
-                const coaTotal = payment.coaItems?.reduce((sum, coa) => sum + (coa.items?.reduce((s, item) => s + (item.value || 0), 0) || 0), 0) || 0
+                const mainTotal = payment.claimMainContract
+                  ? payment.mainContractItems?.reduce((sum, item) => sum + (item.value || 0), 0) || 0
+                  : 0
+                const coaTotal = payment.claimCOA
+                  ? payment.coaItems?.reduce((sum, coa) => sum + (coa.items?.reduce((s, item) => s + (item.value || 0), 0) || 0), 0) || 0
+                  : 0
                 const hasMain = mainTotal > 0
                 const hasCOA = coaTotal > 0
                 const totalClaim = mainTotal + coaTotal + (payment.otherClaim || 0)

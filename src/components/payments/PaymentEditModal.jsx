@@ -471,6 +471,8 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
           description: item.description,
           value: parseCurrency(item.value)
         }))
+      } else {
+        paymentData.mainContractItems = deleteField()
       }
       
       if (claimCOA) {
@@ -486,6 +488,8 @@ export default function PaymentEditModal({ payment, projects, onClose, onSaved }
             }))
           }
         })
+      } else {
+        paymentData.coaItems = deleteField()
       }
       
       await updatePayment(payment.id, paymentData)
